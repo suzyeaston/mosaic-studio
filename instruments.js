@@ -109,6 +109,60 @@
       });
       this.render();
     }
+    selectedLoopKind(){
+      return this.patterns.PRESETS.find(p=>p.id===this.presetSelect.value)?.kind||'drums';
+    }
+    setSoundOptions(select,kind){
+      const previous=select.value;select.replaceChildren();
+      for(const voice of SOUNDS[kind]||[]){
+        const option=this.host.document.createElement('option');
+        option.value=voice.id;option.textContent=voice.label;
+        option.title=voice.description;select.append(option);
+      }
+      if(SOUNDS[kind]?.some(x=>x.id===previous))select.value=previous;
+    }
+    stopPreview(){
+      this.previewEpoch++;
+      if(this.previewTimer!==null){this.host.clearTimeout(this.previewTimer);this.previewTimer=null;}
+      for(const source of this.previewNodes)try{source.stop();}catch{}
+      this.previewNodes.clear();
+      try{this.previewOutput?.disconnect();}catch{}
+      this.previewOutput=null;this.previewing=null;
+      this.previewLoopButton.textContent='▶ HEAR LOOP';
+      this.previewRhythmButton.textContent='▶ HEAR BEAT';
+    }
+    async preview(mode){
+      if(this.previewing===mode){this.stopPreview();return;}
+      this.stopPreview();
+      if(this.recording)return;
+      const token=this.previewEpoch;
+      this.previewing=mode;
+      this.previewLoopButton.textContent=mode==='preset'?'■ STOP PREVIEW':'▶ HEAR LOOP';
+      this.previewRhythmButton.textContent=mode==='rhythm'?'■ STOP PREVIEW':'▶ HEAR BEAT';
+      try{
+        const bpm=this.host.document.getElementById('bpm-input').value;
+        // Audition one bar before committing, without recording or changing
+        // the session duration. The user's video is never included.
+        const pattern=mode==='preset'
+          ?this.patterns.buildPreset(this.presetSelect.value,bpm,1)
+          :this.patterns.buildPreset('custom-rhythm',bpm,1,this.stepData);
+        if(!pattern){this.stopPreview();this.onStatus('Add some drum steps to audition this rhythm.',true);return;}
+        const ctx=await this.ensureAudioContext();
+        if(token!==this.previewEpoch)return;
+        const output=ctx.createGain();output.gain.value=.75;
+        output.connect(ctx.destination);this.previewOutput=output;
+        const voice=mode==='preset'?this.loopVoiceSelect.value:defaultVoice('drums');
+        const start=ctx.currentTime+.06;
+        for(const event of pattern.events){
+          for(const node of playNote(ctx,output,pattern.kind,event.note,
+              start+event.t,event.dur,pattern.volume,voice)){
+            this.previewNodes.add(node);node.onended=()=>this.previewNodes.delete(node);
+          }
+        }
+        this.previewTimer=this.host.setTimeout(()=>this.stopPreview(),(pattern.seconds+1.2)*1000);
+        this.onStatus('Previewing '+pattern.name+'. This sound is not added to your movie until you press Add.');
+      }catch(error){this.stopPreview();this.onStatus('Preview failed: '+(error.message||error),true);}
+    }
     createStepGrid(){
       const doc=this.host.document;
       for(const [instrument,label] of [['kick','KICK'],['snare','SNARE'],['hat','HAT']]){
@@ -122,6 +176,7 @@
           b.textContent=i%4===0?String(i/4+1):'·';
           b.setAttribute('aria-pressed',String(this.stepData[instrument].includes(i)));
           b.addEventListener('click',()=>{
+            if(this.previewing)this.stopPreview();
             const data=this.stepData[instrument],idx=data.indexOf(i);
             if(idx>=0)data.splice(idx,1);else data.push(i);
             data.sort((a,b)=>a-b);
@@ -136,18 +191,20 @@
       if(this.layers.length>=MAX_LAYERS)return this.onStatus('The rack has 12 layers. Mute or remove one to make room.',true);
       const layer=normalizeLayer(raw);
       if(!layer)return this.onStatus('That pattern is empty or cannot be played. Add some notes first.',true);
-      this.layers.push(layer);this.save();this.onChange();this.render();
+      this.stopPreview();this.layers.push(layer);this.save();this.onChange();this.render();
       this.onStatus(layer.name+' is looping at '+layer.bpm+' BPM. Add another part or press Play All. ♡');
       return layer;
     }
     addPreset(){
       const current=this.patterns.buildPreset(this.presetSelect.value,
         this.host.document.getElementById('bpm-input').value,this.barsSelect.value);
+      if(current)current.voice=this.loopVoiceSelect.value;
       return this.addLayer(current);
     }
     addCustomRhythm(){
       const current=this.patterns.buildPreset('custom-rhythm',
         this.host.document.getElementById('bpm-input').value,this.barsSelect.value,this.stepData);
+      if(current)current.voice=defaultVoice('drums');
       return this.addLayer(current);
     }
     get hasLayers(){return this.layers.length>0;}
@@ -169,14 +226,14 @@
       this.exportBus=null;
     }
     begin(){if(this.recording||this.layers.length>=MAX_LAYERS)return false;
-      this.recording={kind:this.kind.value,startedAt:performance.now(),events:[]};
+      this.recording={kind:this.kind.value,voice:this.voiceSelect.value,startedAt:performance.now(),events:[]};
       this.render(true);return true;}
     finish(){
       const r=this.recording;if(!r)return null;
       this.recording=null;
       const tail=Math.max(0,...r.events.map(e=>e.t+e.dur));
       const layer=normalizeLayer({id:String(Date.now())+'-'+Math.random().toString(36).slice(2,8),
-        kind:r.kind,seconds:Math.max(.25,(performance.now()-r.startedAt)/1000,tail),
+        kind:r.kind,voice:r.voice,seconds:Math.max(.25,(performance.now()-r.startedAt)/1000,tail),
         events:r.events,muted:false,volume:.8});
       if(layer){this.layers.push(layer);this.save();this.onChange();}
       this.render();return layer;
@@ -185,7 +242,7 @@
       try{
         const ctx=await this.ensureAudioContext(),kind=this.recording?.kind||this.kind.value;
         const note=pitch(kind,pad),dur=kind==='pad'?1.25:kind==='bass'?.47:.6;
-        playNote(ctx,this.ensureBus(ctx),kind,note,ctx.currentTime+.01,dur,.9);
+        playNote(ctx,this.ensureBus(ctx),kind,note,ctx.currentTime+.01,dur,.9,this.recording?.voice||this.voiceSelect.value);
         if(this.recording){
           if(this.recording.events.length<MAX_EVENTS){
             this.recording.events.push({t:Math.max(0,(performance.now()-this.recording.startedAt)/1000),note,dur});
@@ -193,25 +250,26 @@
         }
       }catch(e){this.onStatus('Instrument unavailable: '+(e.message||e),true);}
     }
-    startPlayback(){this.stopPlayback();this.playing=true;this.nextWindow=0;this.tick(0);}
+    startPlayback(){this.stopPreview();this.stopPlayback();this.playing=true;this.nextWindow=0;this.tick(0);}
     tick(elapsed){
       if(!this.playing||!this.ctx)return;
       const to=Math.max(0,elapsed)+.20;
       if(to<=this.nextWindow)return;
       const base=this.ctx.currentTime-Math.max(0,elapsed);
       for(const layer of this.layers)for(const ev of eventsInWindow(layer,this.nextWindow,to)){
-        const voices=playNote(this.ctx,this.ensureBus(this.ctx),ev.kind,ev.note,base+ev.t,ev.dur,ev.volume);
+        const voices=playNote(this.ctx,this.ensureBus(this.ctx),ev.kind,ev.note,base+ev.t,ev.dur,ev.volume,ev.voice);
         for(const voice of voices){this.voices.add(voice);voice.onended=()=>this.voices.delete(voice);}
       }
       this.nextWindow=to;
     }
-    stopPlayback(){this.playing=false;this.nextWindow=0;
+    stopPlayback(){this.stopPreview();this.playing=false;this.nextWindow=0;
       for(const voice of this.voices)try{voice.stop();}catch{}this.voices.clear();}
     change(id,field,value){
       const layer=this.layers.find(l=>l.id===id);if(!layer)return;
       if(field==='remove')this.layers=this.layers.filter(l=>l.id!==id);
       if(field==='mute')layer.muted=!layer.muted;
       if(field==='volume')layer.volume=Math.max(0,Math.min(1.5,Number(value)/100));
+      if(field==='voice')layer.voice=soundFor(layer.kind,value)?.id||defaultVoice(layer.kind);
       this.save();this.onChange();this.render();
     }
     clear(){this.stopPlayback();this.layers=[];this.recording=null;
@@ -222,6 +280,10 @@
       this.recordBtn.classList.toggle('is-stop',!!this.recording);
       this.recordBtn.disabled=(busy&&!this.recording)||(!this.recording&&this.layers.length>=MAX_LAYERS);
       this.kind.disabled=busy||!!this.recording;
+      this.voiceSelect.disabled=busy||!!this.recording;
+      this.loopVoiceSelect.disabled=busy;
+      this.previewLoopButton.disabled=busy;
+      this.previewRhythmButton.disabled=busy;
       this.presetSelect.disabled=busy;
       this.barsSelect.disabled=busy;
       this.addLoopButton.disabled=busy||this.layers.length>=MAX_LAYERS;
@@ -251,9 +313,22 @@
         remove.textContent='×';remove.className='instrument-remove';remove.disabled=busy;
         remove.setAttribute('aria-label','Remove '+layer.kind+' layer');
         remove.addEventListener('click',()=>this.change(layer.id,'remove'));
-        row.append(title,mute,level,remove);this.lanes.append(row);
+        const voice=this.host.document.createElement('select');
+        voice.className='instrument-layer-voice';
+        voice.setAttribute('aria-label','Sound for '+(layer.name||layer.kind)+' layer');
+        voice.disabled=busy;
+        for(const option of SOUNDS[layer.kind]||[]){
+          const node=this.host.document.createElement('option');
+          node.value=option.id;node.textContent=option.label;voice.append(node);
+        }
+        voice.value=layer.voice;
+        voice.addEventListener('change',()=>this.change(layer.id,'voice',voice.value));
+        const controls=this.host.document.createElement('div');
+        controls.className='instrument-layer-controls';
+        controls.append(voice,mute,level,remove);
+        row.append(title,controls);this.lanes.append(row);
       }
     }
   }
-  return {Rack,KINDS,OFFSETS,KEYBOARD,frequency,pitch,normalizeLayer,eventsInWindow,playNote};
+  return {Rack,KINDS,OFFSETS,KEYBOARD,SOUNDS,defaultVoice,soundFor,frequency,pitch,normalizeLayer,eventsInWindow,playNote};
 });
