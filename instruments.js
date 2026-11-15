@@ -54,6 +54,7 @@
   class Rack {
     constructor({host,ensureAudioContext,onRecord,onChange,onStatus}){
       this.host=host;this.ensureAudioContext=ensureAudioContext;
+      this.onPreviewStart=arguments[0]?.onPreviewStart;
       this.onRecord=onRecord;this.onChange=onChange;this.onStatus=onStatus;
       const el=id=>host.document.getElementById(id);
       this.kind=el('instrument-kind');this.recordBtn=el('instrument-record');
@@ -133,6 +134,7 @@
     }
     async preview(mode){
       if(this.previewing===mode){this.stopPreview();return;}
+      this.onPreviewStart?.();
       this.stopPreview();
       if(this.recording)return;
       const token=this.previewEpoch;
