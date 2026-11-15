@@ -43,7 +43,7 @@
         <div class="transport" role="group" aria-label="Transport controls">
           <button id="play-btn" type="button" class="transport-btn" disabled>▶ PLAY ALL</button>
           <button id="stop-btn" type="button" class="transport-btn" disabled>■ STOP</button>
-          <div class="time-display" aria-label="Transport clock"><strong id="clock">00:00</strong><span id="duration-label">/ 00:15</span></div>
+          <div class="time-display" aria-label="Transport clock"><strong id="clock">00:00</strong><span id="duration-label">/ TARGET 00:15</span></div>
           <div class="progress" role="progressbar" aria-label="Loop position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-bar"></div></div>
         </div>
       </section>
@@ -51,20 +51,21 @@
         <section class="panel settings" aria-labelledby="setup-title">
           <p class="label">02 / session settings</p>
           <h2 id="setup-title">Set your tempo</h2>
-          <label for="duration-select">Take length</label>
-          <select id="duration-select"><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="60">60 seconds</option></select>
+          <label for="duration-select">Planning target <small>(not a recording limit)</small></label>
+          <select id="duration-select"><option value="0">No target / free recording</option><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="60">60 seconds</option><option value="120">2 minutes</option></select>
           <div class="setting-row"><label for="bpm-input">Count-in tempo</label><output id="bpm-value" for="bpm-input">120 BPM</output></div>
           <input id="bpm-input" type="range" min="60" max="200" step="1" value="120">
           <label class="toggle"><input id="metronome-input" type="checkbox" checked><span>Four-beat count-in with clicks</span></label>
           <label class="toggle"><input id="camera-input" type="checkbox" checked><span>Use camera <small>(uncheck for audio only)</small></span></label>
-          <p class="quiet">Each take is the same length. Works best in Chrome or Edge on desktop; Safari behavior varies.</p>
+          <p class="quiet">This target is only a visual guide. Recording starts after your optional count-in and continues until you press Stop &amp; Keep Take. Shorter tracks repeat during playback; the longest take determines export length. Use headphones.</p>
         </section>
         <section class="panel capture" aria-labelledby="capture-title">
           <p class="label">03 / capture</p>
           <h2 id="capture-title">Track <span id="selected-track-number">01</span></h2>
           <p id="selected-track-description">Ready for its first performance.</p>
-          <button id="record-btn" class="record-btn" type="button"><span class="record-bullet" aria-hidden="true"></span> RECORD THIS TILE</button>
+          <button id="record-btn" class="record-btn" type="button">● RECORD THIS TILE</button>
           <button id="cancel-btn" class="ghost-btn" type="button" hidden>DISCARD CURRENT TAKE</button>
+          <p class="record-help" id="record-help">Press Record to start. Press the same button to stop and save your take, whenever you choose.</p>
           <div id="level-section" class="level-section" hidden><label for="level-input">Track volume</label><div class="setting-row"><input id="level-input" type="range" min="0" max="150" value="100"><output id="level-output" for="level-input">100%</output></div></div>
           <div class="secondary-controls">
             <button id="mute-btn" type="button" disabled>Mute tile</button>
