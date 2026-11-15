@@ -16,6 +16,14 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 - Retain clips locally in IndexedDB on the **same browser and device** when storage is available.
 - Zero accounts, ad SDKs, analytics, tracking, paid APIs, server-side uploads, or runtime dependencies.
 
+## Ready-made musical loops and beat builder (v0.5 · Stage 2a)
+
+The SUZY//AI crossover now starts with **music that already loops**, in addition to hand-played instrument notes. The ready-made original browser-synth loop library contains three rhythms (**Harbour Pulse, Broken Machine, Half-time / Air**), plus **Sub Walk** bass, **Glass Circuit** keys and **Soft Orbit** pads. Choose 1, 2 or 4 bars and tap **Add Loop** to get a fully playable, independently mutable layer.
+
+Open **Build Your Own Rhythm** to toggle kick, snare and hat in a 16-step 4/4 sequencer; **Add My Rhythm Loop** creates an independently repeating part. Notes and drum events are generated locally with Web Audio using SUZY//AI's scoring and synthesized drum concepts; there are **no pre-recorded loops or licensed samples**. All pattern layers persist privately in the browser and are routed into MOSAIC's usual Play All and MP4-first export.
+
+The Set Your Tempo BPM value controls **newly created** loops. Existing loops retain their committed BPM and phase to avoid silently rewriting music; keep the tempo constant when building an arrangement to maintain sync. In this prototype, note performance and captured video stay free-running and are not automatically quantized. Pattern loops are a separate layer type and do not overwrite any live take. Audio-reactive **visualizers remain a later stage**.
+
 ## SUZY//AI crossover: playable software instruments (v0.4 · Stage 1)
 
 MOSAIC has a lightweight **Instrument Rack** directly below the video grid. Choose **Keys**, **Bass** or **Pad** and tap the eight note buttons or computer keys **A S D F G H J K**. Press **Record Instrument Layer**, play a phrase and press **Stop & Keep Layer**. Up to twelve separate note-event layers may be muted, mixed and removed. Each layer repeats at its recorded phrase duration alongside the video takes. The browser Web Audio mix is routed into **Play All** and final MP4/WebM video export. If no camera takes exist, the exported video contains the empty square grid and the instrument audio. The stage-two visualizer will improve that picture.
