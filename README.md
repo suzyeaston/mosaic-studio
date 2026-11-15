@@ -7,6 +7,7 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 ## What's in v0.1
 
 - Pick a 2×2 or 3×3 video grid.
+- **No-scroll take controls:** tap the + on an empty tile to start its camera/count-in recording flow. Tap that tile again while recording to **Stop & Keep**. Each recorded tile has its own top-left × remove button (with confirmation), independent of selection. The sidebar recording and removal buttons still work.
 - Record one tile at a time with camera and mic, or mic-only.
 - Choose an optional **15-, 30-, 60-, or 120-second planning target**, or no target. Start recording after the optional four-beat count-in, then **Stop & Keep Take whenever you choose**. No duration automatically ends recording.
 - Monitor earlier takes through headphones while recording the next tile.
