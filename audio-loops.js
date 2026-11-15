@@ -124,6 +124,16 @@
      for(const voice of this.voices)try{voice.stop();}catch{}
      this.voices.clear();
    }
+   applyMixSnapshot(snapshot){
+     for(const layer of this.layers){
+       const level=snapshot['audio:'+layer.id];
+       if(level===undefined)continue;
+       layer.muted=level<=.001;
+       if(level>.001)layer.volume=Math.min(1.5,Math.max(0,level));
+       this.applyGain(layer.id);
+     }
+     this.render();
+   }
    change(id,type,value){
      const layer=this.layers.find(l=>l.id===id);if(!layer)return;
      if(type==='remove'){
@@ -160,7 +170,7 @@
          recorder.onstop=resolve;recorder.onerror=e=>reject(e.error||Error('Microphone recording failed'));
        });
        const startClock=()=>this.getPosition();
-       if(!this.onPlay())throw Error('Could not start the backing transport.');
+       if(!(await this.onPlay()))throw Error('Could not start the backing transport.');
        const active=this.getPosition();
        const bar=240/bpm;
        // Start at a future downbeat with time to prepare the recorder.

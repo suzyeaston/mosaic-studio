@@ -61,7 +61,7 @@
       this.onChange();return this.pending;
     }
     tick(elapsed,apply){
-      if(!this.pending||elapsed<this.pending.at-.08)return false;
+      if(!this.pending||elapsed<this.pending.at-.26)return false;
       const id=this.pending.id;this.pending=null;this.active=id;
       this.save();
       apply(id,this.scenes[id]);
