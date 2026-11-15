@@ -209,7 +209,7 @@
         const elapsed=this.getTransportPosition();
         const tempo=Number(this.layers.find(item=>item.bpm)?.bpm||layer.bpm||120);
         const bar=240/tempo;
-        layer.startAt=Math.ceil((elapsed+.035)/bar)*bar;
+        layer.startAt=Math.ceil((elapsed+.25)/bar)*bar;
       }
       this.layers.push(layer);this.save();this.onChange('added');this.render();
       this.onStatus(layer.name+' is looping at '+layer.bpm+' BPM. Add another part or press Play All. ♡');
