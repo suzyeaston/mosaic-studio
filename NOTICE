@@ -1,0 +1,14 @@
+MOSAIC / SUZY//AI crossover (2026)
+
+The musical instrument synth and independent layer design in instruments.js
+adapt the browser-native patterns Suzy Easton developed in the public SUZY//AI
+repository:
+  https://github.com/suzyeaston/suzy-ai
+  performance/film-club-2026/audio.js
+  suzy_ai/music/toaster_loop_rack.js
+
+SUZY//AI source is licensed under Apache License, Version 2.0.
+Copyright 2026 Suzy Easton.
+
+The MOSAIC implementation is a fresh MIT-licensed browser module. No neural
+model weights or third-party sample libraries are distributed with this work.
