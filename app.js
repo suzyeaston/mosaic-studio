@@ -220,6 +220,7 @@
     ui.record.textContent = recording ? '■ STOP & KEEP TAKE' : busy ? 'PREPARING…' : (selectedClip ? '● RE-RECORD THIS TILE' : '● RECORD THIS TILE');
     ui.record.classList.toggle('is-stop', !!recording);
     ui.cancel.hidden = !busy || playbackMode === 'exporting';
+    ui.cancel.disabled = busy && !!activeRecorder && activeRecorder.state !== 'recording';
     ui.play.disabled = busy || !anyClips() || playbackMode === 'playing';
     ui.stop.disabled = busy || playbackMode !== 'playing';
     ui.export.disabled = busy || !anyClips();
