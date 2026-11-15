@@ -16,6 +16,12 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 - Retain clips locally in IndexedDB on the **same browser and device** when storage is available.
 - Zero accounts, ad SDKs, analytics, tracking, paid APIs, server-side uploads, or runtime dependencies.
 
+## Social-ready movie export (v0.3)
+
+**Export Movie** now prefers MP4, requesting H.264 video + AAC audio first. We negotiate the actual supported `MediaRecorder` MIME type and check the encoder, falling back to WebM only when MP4 is unavailable. The downloaded file's extension matches its real MIME type; simply renaming `.webm` to `.mp4` is not a conversion. A format note appears in the export section and after download. Source takes continue using the browser's preferred capture format to avoid breaking camera/mic capture.
+
+For YouTube and Instagram, MP4 with H.264/AAC is broadly accepted. A generic `video/mp4` recorder can still choose different codecs, so verify playback and platform upload on your actual device; the browser determines the output codecs. If MP4 recording is not supported, a local H.264/AAC conversion is required for Instagram, or retry an up-to-date browser. No third-party uploads or heavy transcoder dependencies are added.
+
 ## Visual effects and social sharing (v0.2)
 
 Pick **Clean**, **Noir**, **Ultraviolet**, **Daydream**, or **VHS** and set effect intensity in the Visual Laboratory. Press **Play All** to preview an effected composite over the existing tile grid. The same canvas renderer runs during export so your downloaded square video includes the effect. Raw camera/mic takes stay pristine, and changing an effect or track clears the previous share-ready export rather than risking sharing a stale mix.
