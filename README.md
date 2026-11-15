@@ -15,6 +15,12 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 - Retain clips locally in IndexedDB on the **same browser and device** when storage is available.
 - Zero accounts, ad SDKs, analytics, tracking, paid APIs, server-side uploads, or runtime dependencies.
 
+## Visual effects and social sharing (v0.2)
+
+Pick **Clean**, **Noir**, **Ultraviolet**, **Daydream**, or **VHS** and set effect intensity in the Visual Laboratory. Press **Play All** to preview an effected composite over the existing tile grid. The same canvas renderer runs during export so your downloaded square video includes the effect. Raw camera/mic takes stay pristine, and changing an effect or track clears the previous share-ready export rather than risking sharing a stale mix.
+
+Export the grid first, then choose **Share Exported Video**. Where the browser supports the Web Share API for video files, MOSAIC opens the native file share sheet. Otherwise it downloads the exported video, and you can copy the editable caption and attach the video yourself to Instagram, TikTok, YouTube or another destination. **The web app cannot silently post to social accounts.** Codec/platform acceptance differs, particularly on iPhones. No media is uploaded to this site or to MOSAIC servers.
+
 ## Quick start on macOS
 
 1. Unzip the download to `~/Downloads/mosaic-studio`.
@@ -49,9 +55,7 @@ Expected Pages URL after publication: `https://suzyeaston.github.io/mosaic-studi
 
 Preferred final URL: `https://www.suzyeaston.ca/mosaic/`.
 
-Once GitHub Pages is live, we can add a WordPress page at `/mosaic/` with a fullscreen iframe and an **Open MOSAIC in a new tab** fallback. See [wordpress-integration.md](wordpress-integration.md) for an example, camera permissions, and tradeoffs. A direct same-origin deployment is preferable if Safari or iframe permissions misbehave. Do not merge a page pointing at a nonexistent Pages URL.
-
-The current WordPress theme deploy has an explicit manifest; all new theme files must be added to `scripts/theme_deploy_manifest.py` in `suzyeaston/suzyeastonca`, and the WordPress page slug must actually exist in the database.
+The production WordPress theme now vendors this app at `assets/mosaic/`, serves it from a virtual `/mosaic/` route, and deploys through the existing GitHub Actions theme pipeline. Update **both repos** for new releases; no GitHub Pages or manual WordPress dashboard page is needed. Source development remains here.
 
 ## Browser & audio limitations
 
