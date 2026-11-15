@@ -28,7 +28,7 @@
     if(!events.length)return null;
     const result={id:String(raw.id||'layer').slice(0,64),kind:raw.kind,
       voice:soundFor(raw.kind,raw.voice)?.id||defaultVoice(raw.kind),
-      seconds,events,muted:!!raw.muted,volume:Math.max(0,Math.min(1.5,Number(raw.volume??.8)||0))};
+      seconds,events,startAt:Number.isFinite(raw.startAt)?Math.max(0,Math.min(1800,raw.startAt)):0,muted:!!raw.muted,volume:Math.max(0,Math.min(1.5,Number(raw.volume??.8)||0))};
     if(raw.source==='preset'||raw.source==='custom-rhythm'){
       result.source=raw.source;
       result.name=String(raw.name||raw.kind).slice(0,55);
@@ -41,10 +41,11 @@
   function eventsInWindow(layer,from,to){
     if(!layer||layer.muted||!(to>from)||!layer.seconds)return [];
     const out=[];
+    const startAt=Number.isFinite(layer.startAt)?Math.max(0,layer.startAt):0;
     for(const e of layer.events){
-      let n=Math.max(0,Math.ceil((from-e.t-.000001)/layer.seconds));
+      let n=Math.max(0,Math.ceil((from-e.t-startAt-.000001)/layer.seconds));
       for(;n<=Math.ceil(to/layer.seconds);n++){
-        const t=e.t+n*layer.seconds;
+        const t=startAt+e.t+n*layer.seconds;
         if(t>=to)break;
         if(t>=from-.000001)out.push({...e,t,kind:layer.kind,volume:layer.volume,voice:layer.voice});
       }
@@ -52,9 +53,10 @@
     return out.sort((a,b)=>a.t-b.t).slice(0,256);
   }
   class Rack {
-    constructor({host,ensureAudioContext,onRecord,onChange,onStatus,onPreviewStart}){
+    constructor({host,ensureAudioContext,onRecord,onChange,onStatus,onPreviewStart,getTransportPosition}){
       this.host=host;this.ensureAudioContext=ensureAudioContext;
       this.onPreviewStart=onPreviewStart;
+      this.getTransportPosition=getTransportPosition;
       this.onRecord=onRecord;this.onChange=onChange;this.onStatus=onStatus;
       const el=id=>host.document.getElementById(id);
       this.kind=el('instrument-kind');this.recordBtn=el('instrument-record');
@@ -124,7 +126,7 @@
     }
     stopPreview(){
       this.previewEpoch++;
-      if(this.previewTimer!==null){this.host.clearTimeout(this.previewTimer);this.previewTimer=null;}
+      if(this.previewTimer!==null){this.host.clearInterval(this.previewTimer);this.previewTimer=null;}
       for(const source of this.previewNodes)try{source.stop();}catch{}
       this.previewNodes.clear();
       try{this.previewOutput?.disconnect();}catch{}
@@ -143,26 +145,33 @@
       this.previewRhythmButton.textContent=mode==='rhythm'?'■ STOP PREVIEW':'▶ HEAR BEAT';
       try{
         const bpm=this.host.document.getElementById('bpm-input').value;
-        // Audition one bar before committing, without recording or changing
-        // the session duration. The user's video is never included.
         const pattern=mode==='preset'
           ?this.patterns.buildPreset(this.presetSelect.value,bpm,1)
           :this.patterns.buildPreset('custom-rhythm',bpm,1,this.stepData);
-        if(!pattern){this.stopPreview();this.onStatus('Add some drum steps to audition this rhythm.',true);return;}
+        if(!pattern){this.stopPreview();this.onStatus('Add drum steps to audition this rhythm.',true);return;}
         const ctx=await this.ensureAudioContext();
         if(token!==this.previewEpoch)return;
         const output=ctx.createGain();output.gain.value=.75;
         output.connect(ctx.destination);this.previewOutput=output;
         const voice=mode==='preset'?this.loopVoiceSelect.value:defaultVoice('drums');
-        const start=ctx.currentTime+.06;
-        for(const event of pattern.events){
-          for(const node of playNote(ctx,output,pattern.kind,event.note,
-              start+event.t,event.dur,pattern.volume,voice)){
-            this.previewNodes.add(node);node.onended=()=>this.previewNodes.delete(node);
+        let nextBarAt=ctx.currentTime+.055;
+        // An audio-clock lookahead repeats the audition until Stop is pressed.
+        // Preview never writes to a layer or the video export bus.
+        const schedule=()=>{
+          if(token!==this.previewEpoch)return;
+          while(nextBarAt<ctx.currentTime+.20){
+            for(const event of pattern.events){
+              for(const node of playNote(ctx,output,pattern.kind,event.note,
+                  nextBarAt+event.t,event.dur,pattern.volume,voice)){
+                this.previewNodes.add(node);node.onended=()=>this.previewNodes.delete(node);
+              }
+            }
+            nextBarAt+=pattern.seconds;
           }
-        }
-        this.previewTimer=this.host.setTimeout(()=>this.stopPreview(),(pattern.seconds+1.2)*1000);
-        this.onStatus('Previewing '+pattern.name+'. This sound is not added to your movie until you press Add.');
+        };
+        schedule();
+        this.previewTimer=this.host.setInterval(schedule,30);
+        this.onStatus('Auditioning '+pattern.name+' on repeat. Press Stop Preview or Add when it feels right.');
       }catch(error){this.stopPreview();this.onStatus('Preview failed: '+(error.message||error),true);}
     }
     createStepGrid(){
