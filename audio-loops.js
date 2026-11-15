@@ -80,7 +80,7 @@
      return {...raw,buffer};
    }
    async restore(saved){
-     const ctx=await this.ensureAudioContext();this.ensureBus(ctx);
+     const ctx=await this.ensureAudioContext(false);this.ensureBus(ctx);
      for(const raw of (Array.isArray(saved)?saved:[]).slice(0,MAX)){
        const valid=validate(raw);if(!valid)continue;
        try{this.layers.push(await this.decode(valid));}
