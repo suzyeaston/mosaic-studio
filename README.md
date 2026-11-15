@@ -16,6 +16,18 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 - Retain clips locally in IndexedDB on the **same browser and device** when storage is available.
 - Zero accounts, ad SDKs, analytics, tracking, paid APIs, server-side uploads, or runtime dependencies.
 
+## Locked live-loop transport & compact performance mixer (v0.7)
+
+**Designed for live mixing rather than only export.** The instrument rack has a prominent **▶ LOOP MUSIC / ■ STOP LOOPS** toggle that runs the same full arrangement transport as the video grid. Adding the first preset loop automatically starts playback. When the mix is already running, adding another loop schedules its entry on a future **bar boundary beyond the Web Audio lookahead**, rather than restarting all tracks or joining mid-beat. All instrument notes stay on the local Web Audio bus; no model or remote service is involved.
+
+**Preview is now continuous.** Hear Loop and Hear Beat repeat until Stop Preview, Add, or the master transport starts. A preview is never saved or routed into MP4 export. Full playback, including zero video takes, works via the dedicated Loop Music button without scrolling up to Play All.
+
+**Recorder timing:** MOSAIC previously called MediaRecorder.start() *before* waiting for its backing clips to start playing, creating an audible offset. The backing transport now starts first; new camera/microphone capture follows as closely as browser APIs allow. Instruments are sequenced from the common AudioContext clock using a 30ms scheduler, independent of the visual animation frame cadence. Recorded instrument events use the transport clock and their phrase length rounds up to a musical bar.
+
+When existing instrument loops are present, tapping **Stop & Keep** on a new camera take schedules the recording to finish at the next whole bar. This is intentional, and can hold the camera/microphone open for up to one bar at the established BPM. The resulting video lane repeats on a musical boundary instead of at an arbitrary frame. Capturing without instrument backing still ends immediately as before. Press **Discard Current Take** to cancel immediately.
+
+The UI is condensed into a darker neon **performance mixer**: smaller recording tiles, tighter track lanes, a live transport indicator and a collapsible Sound Mixer for per-layer voice/volume edits. All original editing controls remain accessible. Note that browser MediaRecorder and HTML video decoding still have device-dependent latency; this is **improved best-effort musical sync**, not sample-accurate DAW sync. Video output and sound must be auditioned in real browsers.
+
 ## Better sound browser, preview-before-add, and arrangement timeline (v0.6)
 
 **No model needed for this problem.** The instrument rack now has a local **sound browser** with two independently selectable patches per instrument family (mellow electric/glassy keys, round/sub bass, warm silk/air pads, and soft/crisp drum kits). Existing saved loops use their saved patch or the new warm default; the harsh original Soft Orbit sawtooth sound is replaced with a lower-volume, filtered harmonic pad with an eased attack and release. A per-layer Sound picker can change the tone of an existing saved loop without destroying its notes or video take.

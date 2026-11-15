@@ -28,7 +28,7 @@ test('Old saved layers still load and default to the new warm patch',()=>{
 test('Loop preview never touches stored instrument layers or composite mix',()=>{
   const s=source('instruments.js'),app=source('app.js'),html=source('index.html');
   assert.match(s,/async preview\(mode\)/);
-  assert.match(s,/pattern\.seconds\+1\.2/);
+  assert.match(s,/this\.previewTimer=this\.host\.setInterval\(schedule,30\)/);
   assert.match(s,/output\.connect\(ctx\.destination\)/);
   assert.doesNotMatch(s,/output\.connect\(this\.exportBus\)/);
   assert.match(s,/this\.onPreviewStart\?\.\(\)/);

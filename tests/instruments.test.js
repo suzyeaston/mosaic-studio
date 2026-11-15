@@ -28,7 +28,7 @@ test('Instrument notes loop independently along the common performance timeline'
 });
 test('Instrument mix participates in playback, recording monitor and composite export',()=>{
   const app=source('app.js'),html=source('index.html');
-  assert.match(app,/instrumentRack\?\.tick\(elapsed\)/);
+  assert.match(app,/instrumentRack\?\.tick\(transportSeconds\(\)\)/);
   assert.match(app,/instrumentRack\?\.connectExport\(exportDestination\)/);
   assert.match(app,/instrumentRack\?\.disconnectExport\(\)/);
   assert.match(app,/instrumentRack\?\.startPlayback\(\)/);
