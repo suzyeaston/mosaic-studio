@@ -1,0 +1,81 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const fs=require('node:fs'),path=require('node:path');
+const scenes=require('../scenes.js'),audio=require('../audio-loops.js');
+const source=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
+const local={memory:new Map(),getItem(key){return this.memory.get(key)||null;},setItem(key,v){this.memory.set(key,v);},removeItem(key){this.memory.delete(key);}};
+const host={localStorage:local};
+
+test('Verse, Chorus and Bridge preserve three independent musician-authored mix snapshots',()=>{
+  local.memory.clear();
+  const deck=new scenes.Deck(host);
+  deck.seed({'video:0':1,'instrument:drums-1':.7});
+  assert.deepEqual(scenes.IDS,['verse','chorus','bridge']);
+  deck.rememberAdded('audio:mic-1',.85);
+  assert.equal(deck.scenes.verse['audio:mic-1'],.85);
+  assert.equal(deck.scenes.chorus['audio:mic-1'],0);
+  deck.capture({'video:0':0,'instrument:drums-1':1,'audio:mic-1':.6});
+  assert.equal(deck.scenes.verse['video:0'],0);
+  assert.equal(deck.scenes.chorus['video:0'],1);
+  let played=null;
+  assert.equal(deck.selectNow('chorus',(name,mix)=>{played={name,mix};}),true);
+  assert.equal(played.mix['video:0'],1);
+  assert.equal(deck.selectNow('bridge',()=>{}),true);
+  const restored=new scenes.Deck(host);
+  assert.equal(restored.active,'bridge');
+  assert.equal(restored.scenes.verse['audio:mic-1'],.6);
+});
+test('Scene launch is armed on a future whole bar and applies without rewriting tracks',()=>{
+  local.memory.clear();
+  const deck=new scenes.Deck(host);
+  deck.seed({'video:0':1});
+  const pending=deck.queue('chorus',3.6,120);
+  assert.equal(pending.at,4);
+  assert.equal(deck.tick(3.5,()=>{}),false);
+  let result=null;
+  assert.equal(deck.tick(3.75,(id,mix)=>result={id,mix}),true);
+  assert.equal(result.id,'chorus');
+  assert.equal(result.mix['video:0'],1);
+  assert.equal(deck.active,'chorus');
+  assert.equal(deck.pending,null);
+  assert.equal(scenes.nextLaunch(4.01,120),6);
+});
+test('Scene input validates track identities and gains',()=>{
+  const mix=scenes.normalizeMix({'video:0':1,'audio:mic-1':.7,'instrument:keys-2':3,
+   'video:99':1,'__proto__':.2,'other':1});
+  assert.equal(mix['video:0'],1);
+  assert.equal(mix['audio:mic-1'],.7);
+  assert.equal(mix['instrument:keys-2'],1.5);
+  assert.equal(mix.other,undefined);
+  assert.equal(mix['video:99'],undefined);
+});
+test('Microphone takes schedule each musical bar separately, without phase-walking',()=>{
+  assert.deepEqual(audio.cycleTimes(4,0,14),[0,4,8,12]);
+  assert.deepEqual(audio.cycleTimes(8,3,18,2),[10,18].filter(t=>t<18));
+  assert.deepEqual(audio.cycleTimes(8,0,1,2),[]);
+  assert.deepEqual(audio.cycleTimes(0,0,1),[]);
+  const blob=new Blob(['sound'],{type:'audio/webm'});
+  const clip=audio.validate({id:'mic-good',blob,seconds:8,bpm:120,name:'Vocal texture',volume:.85});
+  assert.equal(clip.id,'mic-good');
+  assert.equal(clip.seconds,8);
+  assert.equal(audio.validate({...clip,id:'../bad'}),null);
+});
+test('MOSAIC keeps separate camera and microphone stores and routes both into export',()=>{
+  const app=source('app.js'),html=source('index.html'),timeline=source('timeline.js');
+  assert.match(app,/indexedDB\.open\('mosaic-studio-v1', 2\)/);
+  assert.match(app,/createObjectStore\('audioLoops'/);
+  assert.match(app,/audioRack\?\.connectExport\(exportDestination\)/);
+  assert.match(app,/audioRack\?\.disconnectExport\(\)/);
+  assert.match(app,/audioRack\?\.tick\(elapsed\)/);
+  assert.match(app,/sceneDeck\?\.tick\(elapsed,applySceneMix\)/);
+  assert.match(app,/await audioRack\.restore\(await dbAudioRead\(\)\)/);
+  assert.match(app,/sceneDeck\.capture\(currentMixSnapshot\(\)\)/);
+  assert.doesNotMatch(app,/await saveClip\(clip\);\s*renderGrid\(\);\s*\}\s*function changeGrid/);
+  assert.match(html,/id="scene-save"/);
+  assert.match(html,/data-scene="chorus"/);
+  assert.match(html,/id="audio-loop-record"/);
+  assert.match(html,/id="audio-loop-lanes"/);
+  assert.match(html,/src="scenes\.js"/);
+  assert.match(html,/src="audio-loops\.js"/);
+  assert.match(timeline,/audioLoopId:layer\.id/);
+});
