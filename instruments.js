@@ -87,7 +87,7 @@
       host.addEventListener('keydown',e=>{
         if(e.repeat||e.altKey||e.ctrlKey||e.metaKey||e.isComposing)return;
         const tag=e.target?.tagName?.toLowerCase();
-        if(['input','textarea','select','button'].includes(tag)||e.target?.isContentEditable)return;
+        if(['input','textarea','select'].includes(tag)||e.target?.isContentEditable)return;
         const index=KEYBOARD.indexOf(e.key.toLowerCase());
         if(index>=0){e.preventDefault();this.hit(index);}
       });
@@ -183,7 +183,7 @@
         const level=this.host.document.createElement('input');level.type='range';
         level.min='0';level.max='150';level.value=String(Math.round(layer.volume*100));
         level.setAttribute('aria-label',layer.kind+' layer volume');level.disabled=busy;
-        level.addEventListener('input',()=>this.change(layer.id,'volume',level.value));
+        level.addEventListener('change',()=>this.change(layer.id,'volume',level.value));
         const remove=this.host.document.createElement('button');remove.type='button';
         remove.textContent='×';remove.className='instrument-remove';remove.disabled=busy;
         remove.setAttribute('aria-label','Remove '+layer.kind+' layer');
