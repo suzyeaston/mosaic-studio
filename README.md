@@ -8,7 +8,7 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 
 - Pick a 2×2 or 3×3 video grid.
 - Record one tile at a time with camera and mic, or mic-only.
-- Capture 15-, 30-, or 60-second takes with a four-beat metronome count-in.
+- Choose an optional **15-, 30-, 60-, or 120-second planning target**, or no target. Start recording after the optional four-beat count-in, then **Stop & Keep Take whenever you choose**. No duration automatically ends recording.
 - Monitor earlier takes through headphones while recording the next tile.
 - Play all takes, select/replace/mute/remove a tile, and adjust tile volume.
 - Export individual source takes, or composite the grid and mixed audio into a single video file where supported.
@@ -57,7 +57,7 @@ The current WordPress theme deploy has an explicit manifest; all new theme files
 
 - **Prefer current desktop Chrome or Edge for initial QA.** Web APIs and codecs differ in Safari and Firefox.
 - Overdub/video alignment is best-effort, not sample-accurate DAW synchronization. Loop boundaries and camera encoding can introduce drift. A real-device latency pass is required before calling this production-ready.
-- Recording length is fixed per session for alignment. The take can include a short codec tail; automatic playback resynchronizes positions.
+- The longest **actual** recorded take determines the playback/export session length. Shorter takes loop within that timeline; the selected target is only a visual guide, and recording does not auto-stop. A short codec tail or asynchronous browser decode may cause drift, so test with real instruments and headphones.
 - Composite export runs in **real time**, requiring the tab to remain visible; no server-side video transcoding or guaranteed MP4 output. Browser-selected `.webm` or `.mp4` is downloaded. Use individual-tile export if composite export is unsupported.
 - Recording directly from speakers risks feedback. **Use headphones.**
 - IndexedDB is local and subject to storage limits, private-mode restrictions, and browser deletion. This is not cloud backup; download originals.
@@ -66,7 +66,7 @@ The current WordPress theme deploy has an explicit manifest; all new theme files
 
 ## QA checklist
 
-- [ ] Chrome macOS: first camera + mic take, and separate audio-only take.
+- [ ] Chrome macOS: record first camera + mic take for 7s against a 15s guide, then record a separate audio-only take past that guide and stop manually; export should use the longer actual take.
 - [ ] Safari macOS: grant permissions, video/audio playback, recorder MIME, composite export.
 - [ ] Monitor two takes with headphones and check onset drift / first beat and loop boundary.
 - [ ] 2×2 and 3×3 layout, grid downgrade protection when tile 5+ is filled.
