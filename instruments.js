@@ -52,9 +52,9 @@
     return out.sort((a,b)=>a.t-b.t).slice(0,256);
   }
   class Rack {
-    constructor({host,ensureAudioContext,onRecord,onChange,onStatus}){
+    constructor({host,ensureAudioContext,onRecord,onChange,onStatus,onPreviewStart}){
       this.host=host;this.ensureAudioContext=ensureAudioContext;
-      this.onPreviewStart=arguments[0]?.onPreviewStart;
+      this.onPreviewStart=onPreviewStart;
       this.onRecord=onRecord;this.onChange=onChange;this.onStatus=onStatus;
       const el=id=>host.document.getElementById(id);
       this.kind=el('instrument-kind');this.recordBtn=el('instrument-record');
