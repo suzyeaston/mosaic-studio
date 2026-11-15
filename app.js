@@ -947,6 +947,7 @@
     instrumentRack = new window.MosaicInstruments.Rack({
       host:window,ensureAudioContext,onRecord:toggleInstrumentRecording,
       onChange:()=>{lastExport=null;refreshSessionDuration();updateUI();},onStatus:status,
+      onPreviewStart:()=>{if(playbackMode!=='stopped')stopPlayback();},
     });
     restorePreferences();
     db = await openDatabase();
