@@ -1057,6 +1057,12 @@
     if (busy || !clip) return;
     downloadBlob(clip.blob, `mosaic-take-${selected + 1}-${dateName()}.${extFor(clip.blob.type)}`);
   }
+  ui.sceneButtons.forEach(btn=>btn.addEventListener('click',()=>chooseScene(btn.dataset.scene)));
+  ui.sceneSave.addEventListener('click',()=>{
+    if(!sceneDeck||playbackMode==='exporting')return;
+    const id=sceneDeck.capture(currentMixSnapshot());
+    status('Saved your current video, instrument and mic balance as '+id.toUpperCase()+'. ♡');
+  });
   ui.layout.forEach(btn => btn.addEventListener('click', () => changeGrid(btn.dataset.grid)));
   ui.duration.addEventListener('change', () => { if (!busy) setTarget(ui.duration.value); });
   ui.bpm.addEventListener('input', () => { ui.bpmValue.textContent = `${ui.bpm.value} BPM`; savePreferences(); });
@@ -1108,11 +1114,16 @@
   window.addEventListener('pagehide', () => { stopInput(); stopPlayback(); });
 
   async function init() {
+    sceneDeck=new window.MosaicScenes.Deck(window,renderSceneDeck);
     instrumentRack = new window.MosaicInstruments.Rack({
       host:window,ensureAudioContext,onRecord:toggleInstrumentRecording,
       getTransportPosition:transportSeconds,
-      onChange:(reason)=>{
+      onChange:(reason,layer)=>{
         lastExport=null;refreshSessionDuration();updateUI();
+        if(reason==='added'){
+          const latest=layer||instrumentRack.layers[instrumentRack.layers.length-1];
+          if(latest)sceneDeck?.rememberAdded('instrument:'+latest.id,latest.volume);
+        }
         if(reason==='added'&&!busy&&playbackMode==='stopped'){
           startPlayback('playing').then(()=>status('Loop added. Live mixer is running. ✳'))
             .catch(error=>status('Loop added, but playback failed: '+error.message,true));
@@ -1120,10 +1131,33 @@
       },onStatus:status,
       onPreviewStart:()=>{if(playbackMode!=='stopped')stopPlayback();},
     });
+    audioRack=new window.MosaicAudioLoops.Rack({
+      host:window,ensureAudioContext,onStatus:status,
+      getPosition:transportSeconds,getBpm:arrangementBpm,
+      onMicStart:()=>status('Mic input armed. Keep headphones on to prevent backing bleed.'),
+      onPlay:async()=>{
+        if(playbackMode!=='stopped')return true;
+        await startPlayback('audio-recording',true);
+        return playbackMode!=='stopped';
+      },
+      onChange:(reason,clip)=>{
+        if(clip){
+          const record={id:clip.id,blob:clip.blob,name:clip.name,
+            seconds:clip.seconds,bpm:clip.bpm,muted:clip.muted,volume:clip.volume,startAt:clip.startAt};
+          if(reason==='remove')dbAudioWrite('delete',clip.id).catch(()=>status('Could not delete saved audio loop.',true));
+          else dbAudioWrite('put',record).catch(()=>status('Audio loop storage unavailable. Export before closing.',true));
+          if(reason==='added')sceneDeck?.rememberAdded('audio:'+clip.id,clip.volume);
+        }
+        lastExport=null;refreshSessionDuration();updateUI();
+      },
+    });
     restorePreferences();
-    db = await openDatabase();
-    const stored = await loadDatabase();
-    for (const record of stored) installClip(record);
+    db=await openDatabase();
+    const stored=await loadDatabase();
+    for(const record of stored)installClip(record);
+    await audioRack.restore(await dbAudioRead());
+    sceneDeck.seed(currentMixSnapshot());
+    sceneDeck.selectNow(sceneDeck.active,applySceneMix);
     if (stored.some(clip => clip.index >= gridSize)) gridSize = 9;
     refreshSessionDuration();
     setTarget(targetDuration);
@@ -1131,7 +1165,8 @@
     ui.fxStrength.value = String(fxStrength);
     showExportFormat();
     renderGrid();
-    if (stored.length) status(`${stored.length} saved take${stored.length === 1 ? '' : 's'} restored from this browser. Hit Play All to listen.`);
+    if(stored.length)status(`${stored.length} video takes restored. Use the scene deck to build new sections without losing them.`);
+    else if(audioRack.hasLayers)status(`${audioRack.layers.length} audio loops restored. Cue a scene or add a new part.`);
     else if (!db) status('Private mode / storage unavailable. Recordings will not survive a page reload; download your clips.', true);
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) status('Camera and microphone require HTTPS or localhost. Use the included Mac launcher.', true);
     if (typeof MediaRecorder === 'undefined') status('This browser does not support MediaRecorder. Try current Chrome, Edge, or Safari.', true);
