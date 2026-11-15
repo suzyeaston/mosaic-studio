@@ -457,12 +457,13 @@
     }
     ui.cancel.hidden = !busy || playbackMode === 'exporting';
     ui.cancel.disabled = busy && !!activeRecorder && activeRecorder.state !== 'recording';
-    ui.play.disabled = busy || !hasArrangement() || playbackMode === 'playing';
-    ui.play.textContent = '▶ PLAY / LOOP';
-    ui.stop.disabled = busy || playbackMode !== 'playing';
+    const transportActive=playbackMode!=='stopped'&&playbackMode!=='exporting';
+    ui.play.disabled=busy||!!audioRack?.isRecording||!hasArrangement()||transportActive;
+    ui.play.textContent='▶ PLAY / LOOP';
+    ui.stop.disabled=busy||!!audioRack?.isRecording||!transportActive;
     if (ui.loopToggle) {
-      const isPlaying = playbackMode === 'playing';
-      ui.loopToggle.disabled = busy || !hasArrangement();
+      const isPlaying = transportActive;
+      ui.loopToggle.disabled = busy || !!audioRack?.isRecording || !hasArrangement();
       ui.loopToggle.textContent = isPlaying ? '■ STOP LOOPS' : '▶ LOOP MUSIC';
       ui.loopToggle.setAttribute('aria-pressed',String(isPlaying));
       ui.loopToggle.classList.toggle('is-playing',isPlaying);
@@ -494,6 +495,10 @@
     ui.fxStrength.disabled = busy;
     ui.fxStrengthValue.textContent = `${fxStrength}%`;
     instrumentRack?.render(busy);
+    if(audioRack){
+      const btn=audioRack.recordButton;
+      btn.disabled=(busy&&!audioRack.isRecording)||(!audioRack.isRecording&&audioRack.layers.length>=12);
+    }
   }
   async function ensureAudioContext(resume=true) {
     if(!audioContext)audioContext=new (window.AudioContext||window.webkitAudioContext)();
@@ -1072,8 +1077,8 @@
   ui.cancel.addEventListener('click', cancelRecording);
   ui.play.addEventListener('click', () => startPlayback().then(() => status('Playing the arrangement. Looping continues until you press Stop.')).catch(err => status(err.message, true)));
   ui.loopToggle?.addEventListener('click', () => {
-    if(busy)return;
-    if(playbackMode==='playing'){
+    if(busy||audioRack?.isRecording)return;
+    if(playbackMode!=='stopped'){
       stopPlayback();status('Loops stopped. Your layers are still here.');
     }else startPlayback('playing').then(()=>status('Live loop mixer running. Add parts, record or mute lanes.'))
       .catch(error=>status('Cannot play loops: '+error.message,true));
@@ -1135,6 +1140,7 @@
       host:window,ensureAudioContext,onStatus:status,
       getPosition:transportSeconds,getBpm:arrangementBpm,
       onMicStart:()=>status('Mic input armed. Keep headphones on to prevent backing bleed.'),
+      onFinish:()=>{if(playbackMode==='audio-recording'){playbackMode='playing';updateUI();}},
       onPlay:async()=>{
         if(playbackMode!=='stopped')return true;
         await startPlayback('audio-recording',true);

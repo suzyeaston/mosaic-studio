@@ -35,10 +35,10 @@
    return result;
  }
  class Rack{
-   constructor({host,ensureAudioContext,onStatus,onChange,getPosition,onPlay,getBpm,onMicStart}){
+   constructor({host,ensureAudioContext,onStatus,onChange,getPosition,onPlay,getBpm,onMicStart,onFinish}){
      this.host=host;this.ensureAudioContext=ensureAudioContext;this.onStatus=onStatus;
      this.onChange=onChange;this.getPosition=getPosition;this.onPlay=onPlay;
-     this.getBpm=getBpm;this.onMicStart=onMicStart;
+     this.getBpm=getBpm;this.onMicStart=onMicStart;this.onFinish=onFinish;
      const el=id=>host.document.getElementById(id);
      this.recordButton=el('audio-loop-record');
      this.bars=el('audio-loop-bars');this.status=el('audio-loop-status');
@@ -214,7 +214,7 @@
        this.recorder=null;
        this.micStream?.getTracks().forEach(t=>t.stop());this.micStream=null;
        if(this.pending===job)this.pending=null;
-       this.render();
+       this.render();this.onFinish?.();
      }
    }
    cancel(){
