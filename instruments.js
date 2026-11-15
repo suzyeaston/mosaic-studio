@@ -3,50 +3,18 @@
  * independent looping concepts. No Magenta model or network service.
  */
 (function(root,factory){
-  const api=factory();
+  const bank=root.MosaicSoundbank||(typeof module==='object'&&module.exports?require('./soundbank.js'):null);
+  const api=factory(bank);
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(root)root.MosaicInstruments=api;
-})(typeof globalThis!=='undefined'?globalThis:this,function(){
+})(typeof globalThis!=='undefined'?globalThis:this,function(bank){
   'use strict';
+  if(!bank)throw new Error('MOSAIC soundbank module must load before instruments');
+  const {SOUNDS,defaultVoice,soundFor,frequency,playNote}=bank;
   const KINDS=['keys','bass','pad'];
   const OFFSETS=[0,2,4,5,7,9,11,12];
   const KEYBOARD='asdfghjk';
   const MAX_LAYERS=12, MAX_EVENTS=512, STORAGE='mosaic-instrument-layers-v1';
-  const noiseCache=new WeakMap();
-  function percussion(ctx,bus,note,at,volume){
-    const start=Math.max(ctx.currentTime+.006,at),gain=ctx.createGain();
-    gain.connect(bus);
-    const amp=Math.max(.01,Math.min(.5,volume*.22));
-    const g=gain.gain;g.setValueAtTime(.0001,start);
-    if(note===36){
-      const osc=ctx.createOscillator();osc.type='sine';
-      osc.frequency.setValueAtTime(128,start);
-      osc.frequency.exponentialRampToValueAtTime(46,start+.16);
-      g.exponentialRampToValueAtTime(amp,start+.007);
-      g.exponentialRampToValueAtTime(.0001,start+.22);
-      osc.connect(gain);osc.start(start);osc.stop(start+.24);
-      return [osc];
-    }
-    let buffer=noiseCache.get(ctx);
-    if(!buffer){
-      buffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*.4),ctx.sampleRate);
-      let seed=0xace1;const arr=buffer.getChannelData(0);
-      for(let i=0;i<arr.length;i++){
-        seed=(Math.imul(seed,1664525)+1013904223)>>>0;
-        arr[i]=(seed/4294967296)*2-1;
-      }
-      noiseCache.set(ctx,buffer);
-    }
-    const src=ctx.createBufferSource();src.buffer=buffer;
-    const high=ctx.createBiquadFilter();high.type='highpass';
-    high.frequency.value=note===42?6300:1250;
-    g.exponentialRampToValueAtTime(note===42?amp*.43:amp,start+.003);
-    g.exponentialRampToValueAtTime(.0001,start+(note===42?.075:.15));
-    src.connect(high);high.connect(gain);
-    src.start(start);src.stop(start+(note===42?.08:.17));
-    return [src];
-  }
-  const frequency=midi=>440*Math.pow(2,(midi-69)/12);
   const pitch=(kind,pad)=>(kind==='bass'?48:60)+OFFSETS[pad];
   function normalizeLayer(raw){
     if(!raw||!(KINDS.includes(raw.kind)||raw.kind==='drums'))return null;
@@ -59,6 +27,7 @@
     }).filter(Boolean);
     if(!events.length)return null;
     const result={id:String(raw.id||'layer').slice(0,64),kind:raw.kind,
+      voice:soundFor(raw.kind,raw.voice)?.id||defaultVoice(raw.kind),
       seconds,events,muted:!!raw.muted,volume:Math.max(0,Math.min(1.5,Number(raw.volume??.8)||0))};
     if(raw.source==='preset'||raw.source==='custom-rhythm'){
       result.source=raw.source;
@@ -77,33 +46,10 @@
       for(;n<=Math.ceil(to/layer.seconds);n++){
         const t=e.t+n*layer.seconds;
         if(t>=to)break;
-        if(t>=from-.000001)out.push({...e,t,kind:layer.kind,volume:layer.volume});
+        if(t>=from-.000001)out.push({...e,t,kind:layer.kind,volume:layer.volume,voice:layer.voice});
       }
     }
     return out.sort((a,b)=>a.t-b.t).slice(0,256);
-  }
-  function playNote(ctx,bus,kind,note,at,length,volume){
-    if(kind==='drums')return percussion(ctx,bus,note,at,volume);
-    const start=Math.max(ctx.currentTime+.006,at);
-    const dur=Math.max(.08,Math.min(3,length));
-    const gain=ctx.createGain();
-    const amp=Math.min(.23,Math.max(0,volume)*.18);
-    const attack=kind==='pad'?.12:.012;
-    gain.gain.setValueAtTime(0,start);
-    gain.gain.linearRampToValueAtTime(amp,start+Math.min(attack,dur*.35));
-    gain.gain.setValueAtTime(amp,Math.max(start+Math.min(attack,dur*.35),start+dur-.08));
-    gain.gain.linearRampToValueAtTime(0,start+dur+.08);
-    gain.connect(bus);
-    const f=frequency(note),voices=[];
-    const oscillator=(type,ratio,detune=0)=>{
-      const o=ctx.createOscillator();o.type=type;
-      o.frequency.setValueAtTime(f*ratio,start);o.detune.value=detune;
-      o.connect(gain);o.start(start);o.stop(start+dur+.1);voices.push(o);
-    };
-    if(kind==='bass'){oscillator('sine',1);oscillator('triangle',.5);}
-    else if(kind==='pad'){oscillator('sawtooth',1,-5);oscillator('triangle',1,5);}
-    else {oscillator('triangle',1);oscillator('sine',2);}
-    return voices;
   }
   class Rack {
     constructor({host,ensureAudioContext,onRecord,onChange,onStatus}){
@@ -113,6 +59,12 @@
       this.kind=el('instrument-kind');this.recordBtn=el('instrument-record');
       this.pads=el('instrument-pads');this.lanes=el('instrument-layers');
       this.counter=el('instrument-count');
+      this.voiceSelect=el('instrument-voice');
+      this.loopVoiceSelect=el('instrument-loop-voice');
+      this.previewLoopButton=el('instrument-preview-loop');
+      this.previewRhythmButton=el('instrument-preview-rhythm');
+      this.previewing=null;this.previewNodes=new Set();this.previewOutput=null;
+      this.previewTimer=null;this.previewEpoch=0;
       this.patterns=host.MosaicPatterns;
       this.presetSelect=el('instrument-loop-preset');
       this.barsSelect=el('instrument-loop-bars');
@@ -125,6 +77,14 @@
       this.createStepGrid();
       this.addLoopButton.addEventListener('click',()=>this.addPreset());
       this.addRhythmButton.addEventListener('click',()=>this.addCustomRhythm());
+      this.previewLoopButton.addEventListener('click',()=>this.preview('preset'));
+      this.previewRhythmButton.addEventListener('click',()=>this.preview('rhythm'));
+      this.kind.addEventListener('change',()=>this.setSoundOptions(this.voiceSelect,this.kind.value));
+      this.presetSelect.addEventListener('change',()=>{
+        this.stopPreview();this.setSoundOptions(this.loopVoiceSelect,this.selectedLoopKind());
+      });
+      this.setSoundOptions(this.voiceSelect,this.kind.value);
+      this.setSoundOptions(this.loopVoiceSelect,this.selectedLoopKind());
       this.layers=[];this.recording=null;this.ctx=null;this.bus=null;this.exportBus=null;
       this.playing=false;this.nextWindow=0;this.voices=new Set();
       try{const items=JSON.parse(host.localStorage.getItem(STORAGE)||'[]');
