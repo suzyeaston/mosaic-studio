@@ -35,7 +35,7 @@ test('Main transport uses one audio epoch for synth scheduling and video capture
   assert.ok(beforeVideo.indexOf("await startPlayback('recording')")>=0);
   assert.ok(beforeVideo.indexOf("await startPlayback('recording')")<beforeVideo.indexOf("activeRecorder.start(250)"));
   assert.match(app,/transportAudioOrigin = audioContext\.currentTime/);
-  assert.match(app,/setInterval\(\(\) => instrumentRack\?\.tick\(transportSeconds\(\)\), 30\)/);
+  assert.match(app,/audioScheduleId=setInterval\(\(\)=>\{/);
   assert.match(app,/core\.nextBarBoundary\(elapsed,takeSyncBpm\)/);
   assert.match(app,/takeLoopSeconds \|\| Math\.max\(/);
   assert.match(app,/instrumentRack\.begin\(\{clock:transportSeconds,bpm:arrangementBpm\(\)\}\)/);
