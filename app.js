@@ -2,7 +2,7 @@
   'use strict';
   const core = window.MosaicCore;
   const effects = window.MosaicEffects;
-  if (!core || !effects || !window.MosaicInstruments || !window.MosaicTimeline) return;
+  if (!core || !effects || !window.MosaicInstruments || !window.MosaicTimeline || !window.MosaicScenes || !window.MosaicAudioLoops) return;
 
   const el = (id) => document.getElementById(id);
   const ui = {
@@ -25,9 +25,13 @@
     timelineDuration: el('mosaic-arrangement-duration'),
     loopToggle: el('loop-toggle'), loopStatus: el('loop-status'),
     compactMode: el('compact-mode'),
+    sceneButtons: [...document.querySelectorAll('[data-scene]')],
+    sceneSave: el('scene-save'), sceneStatus: el('scene-status'),
   };
   let instrumentRack = null;
-  const hasArrangement = () => clips.size > 0 || !!instrumentRack?.hasLayers;
+  let audioRack = null;
+  let sceneDeck = null;
+  const hasArrangement = () => clips.size > 0 || !!instrumentRack?.hasLayers || !!audioRack?.hasLayers;
   const clips = new Map();
   const mediaNodes = new Map();
   const videoElements = new Map();
@@ -80,9 +84,10 @@
     if (!('indexedDB' in window)) return Promise.resolve(null);
     return new Promise(resolve => {
       try {
-        const request = indexedDB.open('mosaic-studio-v1', 1);
+        const request = indexedDB.open('mosaic-studio-v1', 2);
         request.onupgradeneeded = () => {
           if (!request.result.objectStoreNames.contains('clips')) request.result.createObjectStore('clips', { keyPath: 'index' });
+          if (!request.result.objectStoreNames.contains('audioLoops')) request.result.createObjectStore('audioLoops', { keyPath: 'id' });
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => resolve(null);
@@ -115,6 +120,27 @@
       } catch { resolve([]); }
     });
   }
+  function dbAudioWrite(type, record) {
+    if(!db)return Promise.resolve();
+    return new Promise((resolve,reject)=>{
+      try{
+        const tx=db.transaction('audioLoops','readwrite'),store=tx.objectStore('audioLoops');
+        if(type==='put')store.put(record);
+        if(type==='delete')store.delete(record);
+        if(type==='clear')store.clear();
+        tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+      }catch(error){reject(error);}
+    });
+  }
+  function dbAudioRead(){
+    if(!db)return Promise.resolve([]);
+    return new Promise(resolve=>{
+      try{
+        const req=db.transaction('audioLoops','readonly').objectStore('audioLoops').getAll();
+        req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>resolve([]);
+      }catch{resolve([]);}
+    });
+  }
   function savePreferences() {
     try { localStorage.setItem('mosaic-studio-prefs', JSON.stringify({ gridSize, targetDuration, bpm: Number(ui.bpm.value), camera: ui.camera.checked, clicks: ui.clicks.checked, fxPreset, fxStrength })); } catch { /* private browsing */ }
   }
@@ -138,13 +164,13 @@
     savePreferences();
   }
   function refreshSessionDuration() {
-    sessionDuration = Math.max(core.sessionSeconds(clips.values()), instrumentRack?.duration || 0);
+    sessionDuration = Math.max(core.sessionSeconds(clips.values()), instrumentRack?.duration || 0, audioRack?.duration || 0);
     renderTimeline();
   }
   function renderTimeline() {
     if (!ui.timelineTracks) return;
     ui.timelineTracks.replaceChildren();
-    const lanes = window.MosaicTimeline.makeLanes(clips.values(), instrumentRack?.layers || [], sessionDuration);
+    const lanes = window.MosaicTimeline.makeLanes(clips.values(), instrumentRack?.layers || [], sessionDuration, audioRack?.layers || []);
     ui.timelineDuration.textContent = sessionDuration ? core.formatTime(sessionDuration) : 'NO CLIPS';
     if (!lanes.length) {
       const empty = document.createElement('p');empty.className = 'timeline-empty';
@@ -188,18 +214,20 @@
       mute.setAttribute('aria-label',(lane.muted?'Unmute ':'Mute ')+lane.name);
       mute.addEventListener('click',()=>{
         if(busy)return;
-        if(lane.layerId){
-          instrumentRack.change(lane.layerId,'mute');
-        }else{
-          selected=lane.index;toggleMute();
-        }
+        if(lane.layerId)instrumentRack.change(lane.layerId,'mute');
+        else if(lane.audioLoopId)audioRack.change(lane.audioLoopId,'mute');
+        else {selected=lane.index;toggleMute();}
       });
       controls.append(mute);
-      if(lane.layerId){
+      if(lane.layerId||lane.audioLoopId){
         const remove=document.createElement('button');remove.type='button';
         remove.textContent='×';remove.title='Remove '+lane.name;
         remove.setAttribute('aria-label','Remove '+lane.name);remove.disabled=busy;
-        remove.addEventListener('click',()=>{if(!busy)instrumentRack.change(lane.layerId,'remove');});
+        remove.addEventListener('click',()=>{
+          if(busy)return;
+          if(lane.audioLoopId)audioRack.change(lane.audioLoopId,'remove');
+          else instrumentRack.change(lane.layerId,'remove');
+        });
         controls.append(remove);
       }
       row.append(heading,rail,controls);ui.timelineTracks.append(row);
@@ -209,6 +237,55 @@
     if(!ui.timeline)return;
     ui.timeline.style.setProperty('--playhead',
       (sessionDuration?Math.min(100,Math.max(0,seconds/sessionDuration*100)):0)+'%');
+  }
+  function currentMixSnapshot(){
+    const mix={};
+    for(const clip of clips.values())mix['video:'+clip.index]=clip.muted?0:clip.volume;
+    for(const layer of instrumentRack?.layers||[])
+      mix['instrument:'+layer.id]=layer.muted?0:layer.volume;
+    for(const layer of audioRack?.layers||[])
+      mix['audio:'+layer.id]=layer.muted?0:layer.volume;
+    return mix;
+  }
+  function renderSceneDeck(){
+    if(!sceneDeck)return;
+    for(const button of ui.sceneButtons){
+      const id=button.dataset.scene;
+      const isActive=sceneDeck.active===id,isPending=sceneDeck.pending?.id===id;
+      button.classList.toggle('is-active',isActive);
+      button.classList.toggle('is-queued',isPending);
+      button.setAttribute('aria-pressed',String(isActive));
+      button.textContent=(id==='verse'?'01':id==='chorus'?'02':'03')+' / '+id.toUpperCase()+(isPending?' · NEXT':'');
+      button.disabled=playbackMode==='exporting';
+    }
+    ui.sceneSave.disabled=playbackMode==='exporting';
+    ui.sceneStatus.textContent=sceneDeck.pending
+      ?'ARMED / '+sceneDeck.pending.id.toUpperCase()+' · NEXT BAR'
+      :sceneDeck.active.toUpperCase()+' / LIVE MIX';
+  }
+  function applySceneMix(id,mix){
+    for(const clip of clips.values()){
+      const level=mix['video:'+clip.index];
+      if(level===undefined)continue;
+      clip.muted=level<=.001;
+      if(level>.001)clip.volume=level;
+      applyTrackGain(clip.index);
+      ui.grid.querySelector('.tile[data-index="'+clip.index+'"]')?.classList.toggle('is-muted',clip.muted);
+    }
+    instrumentRack?.applyMixSnapshot(mix);
+    audioRack?.applyMixSnapshot(mix);
+    lastExport=null;
+    renderTimeline();updateUI();
+    status(id.toUpperCase()+' scene engaged. Your recordings are unchanged. ✳');
+  }
+  function chooseScene(id){
+    if(!sceneDeck||playbackMode==='exporting')return;
+    if(playbackMode!=='stopped'&&audioContext){
+      const pending=sceneDeck.queue(id,transportSeconds(),arrangementBpm());
+      if(pending)status(id.toUpperCase()+' queued for the next bar. Keep playing.');
+      else status('Already in '+id.toUpperCase()+'.');
+    }else sceneDeck.selectNow(id,applySceneMix);
+    renderSceneDeck();
   }
   function releaseClip(clip) {
     if (clip && clip.url) URL.revokeObjectURL(clip.url);
