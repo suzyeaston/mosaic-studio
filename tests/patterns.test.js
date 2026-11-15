@@ -49,7 +49,7 @@ test('All six presets stay bounded and use source-agnostic Web Audio synthesis',
     assert.ok(loop.events.every(e=>e.t>=0&&e.t<loop.seconds&&e.dur>0),p.id);
     assert.ok(synth.normalizeLayer(loop),p.id);
   }
-  assert.match(fs.readFileSync(path.join(__dirname,'../instruments.js'),'utf8'),/if\(kind==='drums'\)return percussion/);
+  assert.match(fs.readFileSync(path.join(__dirname,'../soundbank.js'),'utf8'),/if\(kind==='drums'\)return drum/);
   assert.match(app,/instrumentRack\?\.connectExport\(exportDestination\)/);
   assert.match(html,/src="patterns\.js"/);
   assert.match(html,/id="instrument-step-grid"/);

@@ -19,6 +19,8 @@ jobs:
           node --check core.js
           node --check effects.js
           node --check patterns.js
+          node --check soundbank.js
           node --check instruments.js
+          node --check timeline.js
       - name: Tests
         run: node --test tests/*.test.js
