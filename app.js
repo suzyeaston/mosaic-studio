@@ -472,6 +472,7 @@
     ui.export.disabled = busy || !hasArrangement();
     ui.share.disabled = busy || !lastExport;
     ui.clear.disabled = busy || !hasArrangement();
+    renderSceneDeck();
     ui.downloadTile.disabled = busy || !selectedClip;
     ui.mute.disabled = busy || !selectedClip;
     ui.mute.textContent = selectedClip && selectedClip.muted ? 'Unmute tile' : 'Mute tile';
@@ -494,9 +495,9 @@
     ui.fxStrengthValue.textContent = `${fxStrength}%`;
     instrumentRack?.render(busy);
   }
-  async function ensureAudioContext() {
-    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === 'suspended') await audioContext.resume();
+  async function ensureAudioContext(resume=true) {
+    if(!audioContext)audioContext=new (window.AudioContext||window.webkitAudioContext)();
+    if(resume&&audioContext.state==='suspended')await audioContext.resume();
     return audioContext;
   }
   function ensureMediaNode(i, video) {
@@ -536,6 +537,8 @@
     playbackFrame = 0;
     playbackMode = 'stopped';
     instrumentRack?.stopPlayback();
+    audioRack?.stopPlayback();
+    if(sceneDeck?.pending){sceneDeck.pending=null;renderSceneDeck();}
     for (const video of videoElements.values()) {
       video.pause();
       try { video.currentTime = 0; } catch { /* metadata not yet ready */ }
@@ -574,8 +577,8 @@
     };
     playbackFrame = requestAnimationFrame(step);
   }
-  async function startPlayback(mode = 'playing') {
-    if (!hasArrangement()) return;
+  async function startPlayback(mode = 'playing',allowEmpty=false) {
+    if(!hasArrangement()&&!allowEmpty)return;
     stopPlayback();
     await ensureAudioContext();
     for (const [i, video] of videoElements) {
@@ -592,9 +595,16 @@
     transportAudioOrigin = audioContext.currentTime;
     playbackStarted = performance.now();
     instrumentRack?.ensureBus(audioContext);
+    audioRack?.ensureBus(audioContext);
     instrumentRack?.startPlayback();
+    audioRack?.startPlayback();
     playbackMode = mode;
-    audioScheduleId = setInterval(() => instrumentRack?.tick(transportSeconds()), 30);
+    audioScheduleId=setInterval(()=>{
+      const elapsed=transportSeconds();
+      sceneDeck?.tick(elapsed,applySceneMix);
+      instrumentRack?.tick(elapsed);
+      audioRack?.tick(elapsed);
+    },30);
     ui.fxPreview.hidden = mode !== 'playing';
     monitorPlayback();
     updateUI();
