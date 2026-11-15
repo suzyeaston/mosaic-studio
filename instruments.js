@@ -202,7 +202,16 @@
       if(this.layers.length>=MAX_LAYERS)return this.onStatus('The rack has 12 layers. Mute or remove one to make room.',true);
       const layer=normalizeLayer(raw);
       if(!layer)return this.onStatus('That pattern is empty or cannot be played. Add some notes first.',true);
-      this.stopPreview();this.layers.push(layer);this.save();this.onChange();this.render();
+      this.stopPreview();
+      if(this.playing&&this.getTransportPosition){
+        // A new musical lane joins on the next bar boundary, rather than
+        // randomly in the middle of a rhythm or restarting everything.
+        const elapsed=this.getTransportPosition();
+        const tempo=Number(this.layers.find(item=>item.bpm)?.bpm||layer.bpm||120);
+        const bar=240/tempo;
+        layer.startAt=Math.ceil((elapsed+.035)/bar)*bar;
+      }
+      this.layers.push(layer);this.save();this.onChange('added');this.render();
       this.onStatus(layer.name+' is looping at '+layer.bpm+' BPM. Add another part or press Play All. ♡');
       return layer;
     }
@@ -219,9 +228,9 @@
       return this.addLayer(current);
     }
     get hasLayers(){return this.layers.length>0;}
-    get duration(){return Math.max(0,...this.layers.map(l=>l.seconds));}
+    get duration(){return Math.max(0,...this.layers.map(l=>l.seconds+(l.startAt||0)));}
     get isRecording(){return !!this.recording;}
-    get elapsed(){return this.recording?(performance.now()-this.recording.startedAt)/1000:0;}
+    get elapsed(){return this.recording?(this.recording.clock?this.recording.clock():(performance.now()-this.recording.startedAt)/1000):0;}
     save(){try{this.host.localStorage.setItem(STORAGE,JSON.stringify(this.layers));}
       catch{this.onStatus('Cannot save instrument layers in this browser. Export your movie before leaving.',true);}}
     ensureBus(ctx){
@@ -236,15 +245,20 @@
       if(this.bus&&this.exportBus)try{this.bus.disconnect(this.exportBus);}catch{}
       this.exportBus=null;
     }
-    begin(){if(this.recording||this.layers.length>=MAX_LAYERS)return false;
-      this.recording={kind:this.kind.value,voice:this.voiceSelect.value,startedAt:performance.now(),events:[]};
+    begin({clock=null,bpm=120}={}){if(this.recording||this.layers.length>=MAX_LAYERS)return false;
+      this.recording={kind:this.kind.value,voice:this.voiceSelect.value,
+        clock:typeof clock==='function'?clock:null,bpm,startedAt:performance.now(),events:[]};
       this.render(true);return true;}
     finish(){
       const r=this.recording;if(!r)return null;
       this.recording=null;
       const tail=Math.max(0,...r.events.map(e=>e.t+e.dur));
+      const elapsed=r.clock?r.clock():(performance.now()-r.startedAt)/1000;
+      const baseLength=Math.max(.25,elapsed,tail);
+      const beatBar=240/Math.max(60,Math.min(200,Number(r.bpm)||120));
+      const seconds=r.clock?Math.ceil((baseLength+.005)/beatBar)*beatBar:baseLength;
       const layer=normalizeLayer({id:String(Date.now())+'-'+Math.random().toString(36).slice(2,8),
-        kind:r.kind,voice:r.voice,seconds:Math.max(.25,(performance.now()-r.startedAt)/1000,tail),
+        kind:r.kind,voice:r.voice,seconds,
         events:r.events,muted:false,volume:.8});
       if(layer){this.layers.push(layer);this.save();this.onChange();}
       this.render();return layer;
@@ -256,7 +270,8 @@
         playNote(ctx,this.ensureBus(ctx),kind,note,ctx.currentTime+.01,dur,.9,this.recording?.voice||this.voiceSelect.value);
         if(this.recording){
           if(this.recording.events.length<MAX_EVENTS){
-            this.recording.events.push({t:Math.max(0,(performance.now()-this.recording.startedAt)/1000),note,dur});
+            this.recording.events.push({t:Math.max(0,this.recording.clock?
+              this.recording.clock():(performance.now()-this.recording.startedAt)/1000),note,dur});
           }else this.onStatus('512-note limit reached. Stop and keep this layer.',true);
         }
       }catch(e){this.onStatus('Instrument unavailable: '+(e.message||e),true);}
