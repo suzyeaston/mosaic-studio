@@ -22,7 +22,8 @@
   const videoElements = new Map();
   let gridSize = 4;
   let selected = 0;
-  let duration = 15;
+  let targetDuration = 15;
+  let sessionDuration = 0;
   let db = null;
   let audioContext = null;
   let playbackStarted = 0;
@@ -30,7 +31,8 @@
   let playbackMode = 'stopped';
   let activeStream = null;
   let activeRecorder = null;
-  let activeTimer = null;
+  let takeStartedAt = 0;
+  let takeStoppedAt = 0;
   let busy = false;
   let cancelTake = false;
   let exportDestination = null;
@@ -88,23 +90,27 @@
     });
   }
   function savePreferences() {
-    try { localStorage.setItem('mosaic-studio-prefs', JSON.stringify({ gridSize, duration, bpm: Number(ui.bpm.value), camera: ui.camera.checked, clicks: ui.clicks.checked })); } catch { /* private browsing */ }
+    try { localStorage.setItem('mosaic-studio-prefs', JSON.stringify({ gridSize, targetDuration, bpm: Number(ui.bpm.value), camera: ui.camera.checked, clicks: ui.clicks.checked })); } catch { /* private browsing */ }
   }
   function restorePreferences() {
     try {
       const prefs = JSON.parse(localStorage.getItem('mosaic-studio-prefs') || '{}');
       gridSize = prefs.gridSize === 9 ? 9 : 4;
-      duration = core.DURATIONS.includes(prefs.duration) ? prefs.duration : 15;
+      const savedTarget = Number(prefs.targetDuration ?? prefs.duration);
+      targetDuration = core.DURATIONS.includes(savedTarget) ? savedTarget : 15;
       ui.bpm.value = core.clamp(prefs.bpm || 120, 60, 200);
       ui.camera.checked = prefs.camera !== false;
       ui.clicks.checked = prefs.clicks !== false;
     } catch { /* use defaults */ }
   }
-  function setDuration(value) {
-    duration = core.DURATIONS.includes(Number(value)) ? Number(value) : 15;
-    ui.duration.value = String(duration);
-    ui.durationLabel.textContent = `/ ${core.formatTime(duration)}`;
+  function setTarget(value) {
+    targetDuration = core.DURATIONS.includes(Number(value)) ? Number(value) : 15;
+    ui.duration.value = String(targetDuration);
+    updateClock(playbackMode === 'recording' ? (performance.now() - takeStartedAt) / 1000 : 0);
     savePreferences();
+  }
+  function refreshSessionDuration() {
+    sessionDuration = core.sessionSeconds(clips.values());
   }
   function releaseClip(clip) {
     if (clip && clip.url) URL.revokeObjectURL(clip.url);
@@ -116,14 +122,23 @@
     clips.set(record.index, {
       index: record.index, blob: record.blob, audioOnly: !!record.audioOnly,
       muted: !!record.muted, volume: core.clamp(record.volume == null ? 1 : record.volume, 0, 1.5),
+      seconds: Number.isFinite(record.seconds) && record.seconds > 0 ? record.seconds : legacySeconds(),
       url: URL.createObjectURL(record.blob),
     });
+  }
+  function legacySeconds() {
+    // v0.1 stored fixed-length takes without per-clip metadata. Preserve those
+    // old sessions using their original duration instead of the new guide.
+    try {
+      const value = Number(localStorage.getItem('mosaic-studio-fixed-duration'));
+      return value > 0 && Number.isFinite(value) ? value : 15;
+    } catch { return 15; }
   }
   async function saveClip(clip) {
     try {
       await dbWrite('put', {
         index: clip.index, blob: clip.blob, audioOnly: clip.audioOnly,
-        muted: clip.muted, volume: clip.volume,
+        muted: clip.muted, volume: clip.volume, seconds: clip.seconds,
       });
     } catch {
       status('Take recorded, but browser storage is full or unavailable. Download it before closing this tab.', true);
@@ -200,8 +215,10 @@
     ui.selectedDescription.textContent = selectedClip
       ? 'Take recorded. You can replace, mute, mix, or download it.'
       : 'Ready for its first performance.';
-    ui.record.disabled = busy || typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia;
-    ui.record.textContent = busy ? (activeRecorder ? '● RECORDING' : 'PREPARING…') : (selectedClip ? '● RE-RECORD THIS TILE' : '● RECORD THIS TILE');
+    const recording = busy && activeRecorder?.state === 'recording';
+    ui.record.disabled = (busy && !recording) || typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia;
+    ui.record.textContent = recording ? '■ STOP & KEEP TAKE' : busy ? 'PREPARING…' : (selectedClip ? '● RE-RECORD THIS TILE' : '● RECORD THIS TILE');
+    ui.record.classList.toggle('is-stop', !!recording);
     ui.cancel.hidden = !busy || playbackMode === 'exporting';
     ui.play.disabled = busy || !anyClips() || playbackMode === 'playing';
     ui.stop.disabled = busy || playbackMode !== 'playing';
@@ -214,7 +231,7 @@
     ui.levelSection.hidden = !selectedClip;
     ui.level.value = String(Math.round((selectedClip?.volume || 0) * 100));
     ui.levelOutput.textContent = `${ui.level.value}%`;
-    ui.duration.disabled = busy || anyClips();
+    ui.duration.disabled = busy;
     ui.camera.disabled = busy;
     ui.bpm.disabled = busy;
     ui.clicks.disabled = busy;
@@ -249,9 +266,17 @@
   }
   function updateClock(seconds) {
     ui.clock.textContent = core.formatTime(seconds);
-    const percent = Math.min(100, Math.max(0, seconds / duration * 100));
+    const recording = playbackMode === 'recording';
+    const total = recording ? targetDuration : sessionDuration;
+    const percent = recording ? core.targetProgress(seconds, targetDuration)
+      : core.targetProgress(seconds, total);
+    ui.durationLabel.textContent = recording
+      ? (targetDuration ? `/ TARGET ${core.formatTime(targetDuration)}` : '/ FREE TAKE')
+      : (sessionDuration ? `/ ${core.formatTime(sessionDuration)}` :
+        (targetDuration ? `/ TARGET ${core.formatTime(targetDuration)}` : '/ FREE TAKE'));
     ui.progress.style.width = `${percent}%`;
     ui.progressRegion.setAttribute('aria-valuenow', String(Math.round(percent)));
+    ui.progressRegion.setAttribute('aria-label', recording ? 'Take progress against optional planning target' : 'Session playback position');
   }
   function stopPlayback() {
     cancelAnimationFrame(playbackFrame);
@@ -268,15 +293,17 @@
     const step = () => {
       if (playbackMode === 'stopped') return;
       const elapsed = (performance.now() - playbackStarted) / 1000;
-      const position = core.expectedPosition(elapsed, duration);
-      updateClock(position);
+      const position = core.expectedPosition(elapsed, sessionDuration);
+      updateClock(playbackMode === 'recording' ? (performance.now() - takeStartedAt) / 1000 : position);
       // Media elements decode independently. Pull obvious stragglers back toward the shared timeline.
       if (Math.floor(elapsed * 2) !== Math.floor((elapsed - 0.05) * 2)) {
-        for (const video of videoElements.values()) {
-          if (!video.paused && video.readyState >= 1) {
-            const diff = Math.abs(video.currentTime - position);
-            if (Math.min(diff, duration - diff) > 0.22) {
-              try { video.currentTime = position; } catch { /* seek not yet allowed */ }
+        for (const [index, video] of videoElements) {
+          const clipSeconds = clips.get(index)?.seconds || sessionDuration;
+          if (!video.paused && video.readyState >= 1 && clipSeconds > 0) {
+            const clipPosition = core.expectedPosition(elapsed, clipSeconds);
+            const diff = Math.abs(video.currentTime - clipPosition);
+            if (Math.min(diff, Math.abs(clipSeconds - diff)) > 0.22) {
+              try { video.currentTime = clipPosition; } catch { /* seek not yet allowed */ }
             }
           }
         }
@@ -330,8 +357,6 @@
     ui.countdown.hidden = true;
   }
   function stopInput() {
-    if (activeTimer != null) clearTimeout(activeTimer);
-    activeTimer = null;
     if (activeStream) for (const track of activeStream.getTracks()) track.stop();
     activeStream = null;
   }
@@ -354,9 +379,6 @@
       return;
     }
     stopPlayback();
-    if (!anyClips()) {
-      try { localStorage.setItem('mosaic-studio-fixed-duration', String(duration)); } catch { /* private mode */ }
-    }
     busy = true;
     cancelTake = false;
     updateUI();
@@ -381,6 +403,8 @@
       });
       // Start the new recorder and the old-take monitoring on the same recording boundary.
       activeRecorder.start(250);
+      takeStartedAt = performance.now();
+      takeStoppedAt = 0;
       if (anyClips()) {
         try { await startPlayback('recording'); }
         catch (error) { status(`Recording started, but monitoring failed: ${error.message}`, true); }
@@ -389,19 +413,21 @@
         playbackStarted = performance.now();
         monitorPlayback();
       }
-      ui.cancel.hidden = false;
-      ui.record.textContent = '● RECORDING';
-      status(`Recording tile ${selectedAtStart + 1}. Listen on headphones. Take ends automatically at ${duration}s.`);
-      activeTimer = setTimeout(() => { if (activeRecorder?.state === 'recording') activeRecorder.stop(); }, duration * 1000);
+      updateUI();
+      status(`Recording tile ${selectedAtStart + 1}. ${targetDuration ? `${targetDuration}s is a guide only. ` : ''}Press Stop & Keep Take whenever you're done.`);
       await stopped;
       const wasCanceled = cancelTake;
       const blob = new Blob(chunks, { type: activeRecorder.mimeType || mime || (input.audioOnly ? 'audio/webm' : 'video/webm') });
       stopPlayback();
       if (!wasCanceled && blob.size > 0) {
-        const clip = { index: selectedAtStart, blob, audioOnly: input.audioOnly, muted: false, volume: 1 };
+        const clip = {
+          index: selectedAtStart, blob, audioOnly: input.audioOnly, muted: false, volume: 1,
+          seconds: Math.max(0.1, ((takeStoppedAt || performance.now()) - takeStartedAt) / 1000),
+        };
         installClip(clip);
+        refreshSessionDuration();
         await saveClip(clip);
-        status(`Tile ${selectedAtStart + 1} captured. Select another tile to layer the performance, or Play All to listen.`);
+        status(`Tile ${selectedAtStart + 1} captured (${core.formatTime(clip.seconds)}). Choose another tile to overdub, or Play All.`);
       } else {
         status(wasCanceled ? 'Take discarded. Previous tile preserved.' : 'The recorder returned an empty take. Try again.', !wasCanceled);
       }
@@ -416,10 +442,22 @@
       renderGrid();
     }
   }
-  function cancelRecording() {
-    cancelTake = true;
-    if (activeRecorder?.state === 'recording') activeRecorder.stop();
-    else if (activeStream) stopInput();
+  function stopTake(keep) {
+    if (!busy) return;
+    if (!keep) cancelTake = true;
+    if (activeRecorder?.state === 'recording') {
+      takeStoppedAt = performance.now();
+      activeRecorder.stop();
+      updateUI();
+      status(keep ? 'Finishing take…' : 'Discarding take…');
+    } else if (!keep && activeStream) {
+      stopInput();
+    }
+  }
+  function cancelRecording() { stopTake(false); }
+  function recordOrStop() {
+    if (activeRecorder?.state === 'recording') stopTake(true);
+    else if (!busy) startTake();
   }
   function downloadBlob(blob, name) {
     const url = URL.createObjectURL(blob);
@@ -491,8 +529,8 @@
       const stopped = new Promise((resolve, reject) => { rec.onstop = resolve; rec.onerror = e => reject(e.error || new Error('Export recorder failed')); });
       rec.start(250);
       await startPlayback('exporting');
-      status(`Printing ${duration}s of video and audio in real time. Keep this tab active…`);
-      await sleep(duration * 1000);
+      status(`Printing ${Math.ceil(sessionDuration)}s of video and audio in real time. Keep this tab active…`);
+      await sleep(sessionDuration * 1000);
       if (rec.state === 'recording') rec.stop();
       await stopped;
       drawing = false; cancelAnimationFrame(drawId);
@@ -520,6 +558,7 @@
     if (busy || !clips.has(selected) || !confirm(`Remove tile ${selected + 1}? You can't undo this.`)) return;
     stopPlayback();
     releaseClip(clips.get(selected)); clips.delete(selected);
+    refreshSessionDuration();
     try { await dbWrite('delete', selected); } catch { status('Tile removed in memory, but storage update failed.', true); }
     renderGrid();
     status(`Tile ${selected + 1} removed.`);
@@ -529,6 +568,7 @@
     stopPlayback();
     for (const clip of clips.values()) releaseClip(clip);
     clips.clear();
+    refreshSessionDuration();
     try { await dbWrite('clear'); } catch { status('Session cleared in memory. Browser storage may still contain old clips.', true); }
     renderGrid();
     status('Clean slate. Your next arrangement starts here.');
@@ -559,11 +599,11 @@
     downloadBlob(clip.blob, `mosaic-take-${selected + 1}-${dateName()}.${extFor(clip.blob.type)}`);
   }
   ui.layout.forEach(btn => btn.addEventListener('click', () => changeGrid(btn.dataset.grid)));
-  ui.duration.addEventListener('change', () => { if (!anyClips() && !busy) setDuration(ui.duration.value); });
+  ui.duration.addEventListener('change', () => { if (!busy) setTarget(ui.duration.value); });
   ui.bpm.addEventListener('input', () => { ui.bpmValue.textContent = `${ui.bpm.value} BPM`; savePreferences(); });
   ui.camera.addEventListener('change', savePreferences);
   ui.clicks.addEventListener('change', savePreferences);
-  ui.record.addEventListener('click', startTake);
+  ui.record.addEventListener('click', recordOrStop);
   ui.cancel.addEventListener('click', cancelRecording);
   ui.play.addEventListener('click', () => startPlayback().then(() => status('Playback running. The tiles are your rhythm section.')).catch(err => status(err.message, true)));
   ui.stop.addEventListener('click', () => { stopPlayback(); status('Playback stopped.'); });
@@ -592,14 +632,8 @@
     const stored = await loadDatabase();
     for (const record of stored) installClip(record);
     if (stored.some(clip => clip.index >= gridSize)) gridSize = 9;
-    // Every saved take belongs to its original fixed-length session.
-    if (stored.length) {
-      try {
-        const storedDuration = Number(localStorage.getItem('mosaic-studio-fixed-duration'));
-        if (core.DURATIONS.includes(storedDuration)) duration = storedDuration;
-      } catch { /* no localStorage */ }
-    }
-    setDuration(duration);
+    refreshSessionDuration();
+    setTarget(targetDuration);
     renderGrid();
     if (stored.length) status(`${stored.length} saved take${stored.length === 1 ? '' : 's'} restored from this browser. Hit Play All to listen.`);
     else if (!db) status('Private mode / storage unavailable. Recordings will not survive a page reload; download your clips.', true);
