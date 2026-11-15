@@ -18,5 +18,6 @@ jobs:
           node --check app.js
           node --check core.js
           node --check effects.js
+          node --check instruments.js
       - name: Tests
         run: node --test tests/*.test.js

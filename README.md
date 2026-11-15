@@ -16,6 +16,16 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 - Retain clips locally in IndexedDB on the **same browser and device** when storage is available.
 - Zero accounts, ad SDKs, analytics, tracking, paid APIs, server-side uploads, or runtime dependencies.
 
+## SUZY//AI crossover: playable software instruments (v0.4 · Stage 1)
+
+MOSAIC has a lightweight **Instrument Rack** directly below the video grid. Choose **Keys**, **Bass** or **Pad** and tap the eight note buttons or computer keys **A S D F G H J K**. Press **Record Instrument Layer**, play a phrase and press **Stop & Keep Layer**. Up to twelve separate note-event layers may be muted, mixed and removed. Each layer repeats at its recorded phrase duration alongside the video takes. The browser Web Audio mix is routed into **Play All** and final MP4/WebM video export. If no camera takes exist, the exported video contains the empty square grid and the instrument audio. The stage-two visualizer will improve that picture.
+
+This reuses the *design and synthesis ideas* from SUZY//AI's browser audio renderer and TOASTER independent looping model. The first release **does not run Magenta or generative AI**. No model weights, samples, external scripts, online accounts or server uploads. Instrument notes are saved as compact event data in browser localStorage (video takes remain in IndexedDB), subject to normal storage eviction.
+
+These are short, triggered notes rather than a sustain-pedal piano. The scheduling uses a Web Audio lookahead behind MOSAIC's existing browser transport; it is not sample-accurate DAW synchronization. MIDI input, quantization, longer envelopes and audio-reactive visuals are future stages. This is an experimental instrument and requires listening QA.
+
+Source attribution: see `NOTICE` and [SUZY//AI](https://github.com/suzyeaston/suzy-ai).
+
 ## Social-ready movie export (v0.3)
 
 **Export Movie** now prefers MP4, requesting H.264 video + AAC audio first. We negotiate the actual supported `MediaRecorder` MIME type and check the encoder, falling back to WebM only when MP4 is unavailable. The downloaded file's extension matches its real MIME type; simply renaming `.webm` to `.mp4` is not a conversion. A format note appears in the export section and after download. Source takes continue using the browser's preferred capture format to avoid breaking camera/mic capture.

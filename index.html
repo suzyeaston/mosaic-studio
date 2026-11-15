@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <script defer src="core.js"></script>
   <script defer src="effects.js"></script>
+  <script defer src="instruments.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -48,6 +49,25 @@
           <div class="time-display" aria-label="Transport clock"><strong id="clock">00:00</strong><span id="duration-label">/ TARGET 00:15</span></div>
           <div class="progress" role="progressbar" aria-label="Loop position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-bar"></div></div>
         </div>
+        <section class="instrument-rack" aria-labelledby="instrument-title">
+          <div class="instrument-head">
+            <div><p class="label">02 / suzy // instrument layers</p><h2 id="instrument-title">Play another part ✳</h2></div>
+            <span id="instrument-count" class="instrument-count">0 / 12 layers</span>
+          </div>
+          <div class="instrument-controls">
+            <label for="instrument-kind">Instrument
+              <select id="instrument-kind">
+                <option value="keys">Keys · glassy triangle</option>
+                <option value="bass">Bass · sub pulse</option>
+                <option value="pad">Pad · slow synth</option>
+              </select>
+            </label>
+            <button id="instrument-record" type="button">● RECORD INSTRUMENT LAYER</button>
+          </div>
+          <div id="instrument-pads" class="instrument-pads" role="group" aria-label="Instrument notes C to C; keyboard A S D F G H J K"></div>
+          <p class="instrument-tip">Tap notes or use A S D F G H J K. Press Record, play a phrase, then Stop &amp; Keep. Each layer repeats independently with your video. No AI models or cloud audio.</p>
+          <div id="instrument-layers" class="instrument-layers" aria-label="Saved instrument layers"></div>
+        </section>
       </section>
       <aside class="sidebar">
         <section class="panel fx-panel" aria-labelledby="fx-title">
