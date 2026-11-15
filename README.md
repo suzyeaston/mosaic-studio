@@ -16,6 +16,16 @@ An independent browser music tool by Suzy Easton, designed to complement the [au
 - Retain clips locally in IndexedDB on the **same browser and device** when storage is available.
 - Zero accounts, ad SDKs, analytics, tracking, paid APIs, server-side uploads, or runtime dependencies.
 
+## Better sound browser, preview-before-add, and arrangement timeline (v0.6)
+
+**No model needed for this problem.** The instrument rack now has a local **sound browser** with two independently selectable patches per instrument family (mellow electric/glassy keys, round/sub bass, warm silk/air pads, and soft/crisp drum kits). Existing saved loops use their saved patch or the new warm default; the harsh original Soft Orbit sawtooth sound is replaced with a lower-volume, filtered harmonic pad with an eased attack and release. A per-layer Sound picker can change the tone of an existing saved loop without destroying its notes or video take.
+
+Use **Hear Loop** to audition one bar of the selected preset at your current BPM and timbre, or **Hear Beat** to audition a custom 16-step rhythm. Preview runs on an isolated Web Audio bus, stops before recording or Play All, and is **not saved or included in exports**. Only **Add Loop** or **Add My Rhythm Loop** adds actual music to the arrangement.
+
+The **Arrangement timeline** sits directly below the video tiles and transport, similar to iMovie: individual video/mic lanes and instrument/drum lanes display coloured repeating clips and note-event marks, the playhead moves during playback, and each lane can be muted from the strip. It is **a visualization of the existing playback arrangement**, not a new audio engine or drag/trim/sequencing editor. Deleting musical clips from the strip removes only the selected music layer; source media is kept in IndexedDB as before.
+
+All sounds are local Web Audio synthesis, with no sampled content, cloud inference or account. The previewer and final video export remain separate signal paths. For real audio samples and more acoustic realism, consider a properly licensed downloadable soundfont/sample pack in a later phase. Browser/device listening and precise audio sync need hands-on QA.
+
 ## Ready-made musical loops and beat builder (v0.5 · Stage 2a)
 
 The SUZY//AI crossover now starts with **music that already loops**, in addition to hand-played instrument notes. The ready-made original browser-synth loop library contains three rhythms (**Harbour Pulse, Broken Machine, Half-time / Air**), plus **Sub Walk** bass, **Glass Circuit** keys and **Soft Orbit** pads. Choose 1, 2 or 4 bars and tap **Add Loop** to get a fully playable, independently mutable layer.
