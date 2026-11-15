@@ -22,5 +22,7 @@ jobs:
           node --check soundbank.js
           node --check instruments.js
           node --check timeline.js
+          node --check scenes.js
+          node --check audio-loops.js
       - name: Tests
         run: node --test tests/*.test.js
