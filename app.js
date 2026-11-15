@@ -716,7 +716,9 @@
           index: selectedAtStart, blob, audioOnly: input.audioOnly, muted: false, volume: 1,
           seconds: takeLoopSeconds || Math.max(0.1, ((takeStoppedAt || performance.now()) - takeStartedAt) / 1000),
         };
+        const wasFilled=clips.has(selectedAtStart);
         installClip(clip);
+        if(!wasFilled)sceneDeck?.rememberAdded('video:'+selectedAtStart,clip.volume);
         refreshSessionDuration();
         await saveClip(clip);
         status(`Tile ${selectedAtStart + 1} captured (${core.formatTime(clip.seconds)}). Choose another tile to overdub, or Play All.`);
@@ -908,7 +910,9 @@
         applyTrackGain(index);
       }
       instrumentRack?.ensureBus(audioContext);
+      audioRack?.ensureBus(audioContext);
       instrumentRack?.connectExport(exportDestination);
+      audioRack?.connectExport(exportDestination);
       drawing = true;
       const draw = () => { if (!drawing) return; renderFinalFrame(ctx, 720, 720, performance.now() / 1000); drawId = requestAnimationFrame(draw); };
       draw();
@@ -950,6 +954,7 @@
         if (exportDestination) try { node.gain.disconnect(exportDestination); } catch { /* noop */ }
       }
       instrumentRack?.disconnectExport();
+      audioRack?.disconnectExport();
       if (outputStream) for (const track of outputStream.getTracks()) track.stop();
       if (canvasStream) for (const track of canvasStream.getTracks()) track.stop();
       exportDestination = null;
@@ -981,8 +986,11 @@
     for (const clip of clips.values()) releaseClip(clip);
     clips.clear();
     instrumentRack?.clear();
+    audioRack?.clear();
+    sceneDeck?.clear();
     refreshSessionDuration();
-    try { await dbWrite('clear'); } catch { status('Session cleared in memory. Browser storage may still contain old clips.', true); }
+    try { await Promise.all([dbWrite('clear'),dbAudioWrite('clear')]); }
+    catch { status('Session cleared in memory. Browser storage may still contain old clips.', true); }
     renderGrid();
     status('Clean slate. Your next arrangement starts here.');
   }
@@ -993,7 +1001,10 @@
     clip.muted = !clip.muted;
     applyTrackGain(selected);
     await saveClip(clip);
-    renderGrid();
+    // Never rebuild the video grid when a performer mutes a lane.
+    // renderGrid() stops the transport and destroys active media elements.
+    ui.grid.querySelector('.tile[data-index="'+selected+'"]')?.classList.toggle('is-muted',clip.muted);
+    updateUI();renderTimeline();
   }
   function changeGrid(value) {
     if (busy) return;
